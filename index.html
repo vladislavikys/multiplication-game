@@ -109,9 +109,6 @@
           };
 
           const showResults = () => {
-            const percentage = Math.round((score / totalRounds) * 100);
-            const resultText = `🎮 ИТОГИ ИГРЫ 🎮\n\nПравильных ответов: ${score} из ${totalRounds}\nПроцент успеха: ${percentage}%\nЛучшая серия: ${bestStreak}\n\n${percentage >= 90 ? '🏆 Отлично!' : percentage >= 70 ? '👍 Хорошо!' : percentage >= 50 ? '💪 Неплохо!' : '📚 Продолжай тренироваться!'}`;
-            alert(resultText);
             setGameState('results');
           };
 
