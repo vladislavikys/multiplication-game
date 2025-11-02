@@ -33,33 +33,45 @@
           const audioContextRef = useRef(null);
 
           useEffect(() => {
-            audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            try {
+              audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (e) {
+              console.log('Audio not supported');
+            }
           }, []);
 
           const speak = (text) => {
             if (!soundEnabled) return;
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'ru-RU';
-            utterance.rate = 0.9;
-            utterance.pitch = 1.2;
-            utterance.volume = 1;
-            window.speechSynthesis.cancel();
-            window.speechSynthesis.speak(utterance);
+            try {
+              const utterance = new SpeechSynthesisUtterance(text);
+              utterance.lang = 'ru-RU';
+              utterance.rate = 0.9;
+              utterance.pitch = 1.2;
+              utterance.volume = 1;
+              window.speechSynthesis.cancel();
+              window.speechSynthesis.speak(utterance);
+            } catch (e) {
+              console.log('Speech not supported');
+            }
           };
 
           const playSound = (frequency, duration, type = 'sine') => {
             if (!soundEnabled || !audioContextRef.current) return;
-            const ctx = audioContextRef.current;
-            const oscillator = ctx.createOscillator();
-            const gainNode = ctx.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(ctx.destination);
-            oscillator.frequency.value = frequency;
-            oscillator.type = type;
-            gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
-            oscillator.start(ctx.currentTime);
-            oscillator.stop(ctx.currentTime + duration);
+            try {
+              const ctx = audioContextRef.current;
+              const oscillator = ctx.createOscillator();
+              const gainNode = ctx.createGain();
+              oscillator.connect(gainNode);
+              gainNode.connect(ctx.destination);
+              oscillator.frequency.value = frequency;
+              oscillator.type = type;
+              gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+              gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+              oscillator.start(ctx.currentTime);
+              oscillator.stop(ctx.currentTime + duration);
+            } catch (e) {
+              console.log('Sound error');
+            }
           };
 
           const playCorrectSound = () => {
@@ -69,6 +81,7 @@
           };
 
           const playWrongSound = () => playSound(200, 0.3, 'sawtooth');
+          
           const playStreakSound = () => {
             playSound(880, 0.15);
             setTimeout(() => playSound(1046.5, 0.2), 150);
@@ -122,7 +135,6 @@
                 userAnswer,
                 correctAnswer,
                 isCorrect: true,
-                attemptsUsed: 3 - attempts,
                 wrongAnswers: existingWrong?.wrongAnswers || []
               }]);
               
@@ -148,7 +160,6 @@
                   userAnswer,
                   correctAnswer,
                   isCorrect: false,
-                  attemptsUsed: 0,
                   wrongAnswers
                 }]);
                 setAnswer('');
@@ -165,7 +176,6 @@
                   userAnswer,
                   correctAnswer,
                   isCorrect: false,
-                  attemptsUsed: 3,
                   wrongAnswers
                 }]);
                 
@@ -190,34 +200,30 @@
           };
 
           const percentage = totalRounds > 0 ? Math.round((score / totalRounds) * 100) : 0;
-          const mathBg = {
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Ctext x='5' y='20' font-size='20' fill='%23e0e7ff' opacity='0.3'%3E+%3C/text%3E%3Ctext x='35' y='45' font-size='20' fill='%23ddd6fe' opacity='0.3'%3E×%3C/text%3E%3Ctext x='15' y='50' font-size='18' fill='%23fce7f3' opacity='0.3'%3E=%3C/text%3E%3C/svg%3E")`,
-            backgroundSize: '60px 60px'
-          };
 
           if (gameState === 'setup') {
             return (
-              <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
-                <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-purple-400 relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"></div>
-                  <div className="text-center mb-8">
-                    <div className="text-6xl mb-4">🔢</div>
-                    <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 mb-2">Таблица Умножения</h1>
-                    <p className="text-purple-600 font-bold text-lg">Математическое Приключение!</p>
+              <div style={{minHeight: '100vh', background: 'linear-gradient(to bottom right, rgb(233, 213, 255), rgb(251, 207, 232), rgb(191, 219, 254))', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'}}>
+                <div style={{background: 'white', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', padding: '32px', maxWidth: '448px', width: '100%', border: '4px solid rgb(192, 132, 252)', position: 'relative', overflow: 'hidden'}}>
+                  <div style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '8px', background: 'linear-gradient(to right, rgb(192, 132, 252), rgb(236, 72, 153), rgb(147, 197, 253)'}}></div>
+                  <div style={{textAlign: 'center', marginBottom: '32px'}}>
+                    <div style={{fontSize: '60px', marginBottom: '16px'}}>🔢</div>
+                    <h1 style={{fontSize: '36px', fontWeight: 900, background: 'linear-gradient(to right, rgb(147, 51, 234), rgb(219, 39, 119))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '8px'}}>Таблица Умножения</h1>
+                    <p style={{color: 'rgb(147, 51, 234)', fontWeight: 700, fontSize: '18px'}}>Математическое Приключение!</p>
                   </div>
-                  <div className="mb-6 bg-gradient-to-r from-purple-100 to-pink-100 p-6 rounded-2xl border-2 border-purple-300">
-                    <label className="block text-purple-800 font-bold mb-3 text-center text-lg">🎯 Сколько примеров хочешь решить?</label>
-                    <div className="text-center mb-4">
-                      <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">{totalRounds}</span>
+                  <div style={{marginBottom: '24px', background: 'linear-gradient(to right, rgb(243, 232, 255), rgb(252, 231, 243))', padding: '24px', borderRadius: '16px', border: '2px solid rgb(216, 180, 254)'}}>
+                    <label style={{display: 'block', color: 'rgb(107, 33, 168)', fontWeight: 700, marginBottom: '12px', textAlign: 'center', fontSize: '18px'}}>🎯 Сколько примеров хочешь решить?</label>
+                    <div style={{textAlign: 'center', marginBottom: '16px'}}>
+                      <span style={{fontSize: '60px', fontWeight: 900, background: 'linear-gradient(to right, rgb(147, 51, 234), rgb(219, 39, 119))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'}}>{totalRounds}</span>
                     </div>
-                    <input type="range" value={totalRounds} onChange={(e) => setTotalRounds(parseInt(e.target.value))} min="5" max="50" step="5" className="w-full h-4 rounded-full appearance-none cursor-pointer" style={{background: `linear-gradient(to right, #a855f7 0%, #ec4899 ${(totalRounds - 5) / 45 * 100}%, #e9d5ff ${(totalRounds - 5) / 45 * 100}%, #fce7f3 100%)`}} />
-                    <div className="flex justify-between text-sm text-purple-600 mt-2 font-semibold">
+                    <input type="range" value={totalRounds} onChange={(e) => setTotalRounds(parseInt(e.target.value))} min="5" max="50" step="5" style={{width: '100%', height: '16px', borderRadius: '9999px', cursor: 'pointer', background: `linear-gradient(to right, rgb(168, 85, 247) 0%, rgb(236, 72, 153) ${(totalRounds - 5) / 45 * 100}%, rgb(233, 213, 255) ${(totalRounds - 5) / 45 * 100}%, rgb(252, 231, 243) 100%)`}} />
+                    <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: 'rgb(147, 51, 234)', marginTop: '8px', fontWeight: 600}}>
                       <span>5</span><span>25</span><span>50</span>
                     </div>
-                    <p className="text-sm text-purple-600 mt-3 text-center font-semibold">⭐ Перетащи ползунок</p>
+                    <p style={{fontSize: '14px', color: 'rgb(147, 51, 234)', marginTop: '12px', textAlign: 'center', fontWeight: 600}}>⭐ Перетащи ползунок</p>
                   </div>
-                  <button onClick={startGame} className="w-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 text-white text-2xl font-black py-5 rounded-2xl hover:from-purple-600 hover:via-pink-600 hover:to-purple-600 transition-all transform hover:scale-105 flex items-center justify-center gap-3 shadow-lg">▶ ПОЕХАЛИ!</button>
-                  <div className="mt-4 flex justify-center gap-4 text-4xl opacity-50">
+                  <button onClick={startGame} style={{width: '100%', background: 'linear-gradient(to right, rgb(168, 85, 247), rgb(236, 72, 153), rgb(168, 85, 247))', color: 'white', fontSize: '24px', fontWeight: 900, padding: '20px', borderRadius: '16px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'}}>▶ ПОЕХАЛИ!</button>
+                  <div style={{marginTop: '16px', display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '36px', opacity: 0.5}}>
                     <span>÷</span><span>+</span><span>−</span><span>×</span><span>=</span>
                   </div>
                 </div>
@@ -228,105 +234,93 @@
           if (gameState === 'results') {
             const grade = percentage >= 90 ? '🏆' : percentage >= 70 ? '⭐' : percentage >= 50 ? '👍' : '💪';
             return (
-              <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
-                <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full border-4 border-purple-400 relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"></div>
-                  <div className="text-center mb-6">
-                    <div className="text-8xl mb-4">{grade}</div>
-                    <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 mb-2">Игра Завершена!</h1>
-                    <p className="text-2xl font-bold text-purple-600">{percentage >= 90 ? 'Отлично!' : percentage >= 70 ? 'Хорошо!' : percentage >= 50 ? 'Неплохо!' : 'Продолжай тренироваться!'}</p>
+              <div style={{minHeight: '100vh', background: 'linear-gradient(to bottom right, rgb(233, 213, 255), rgb(251, 207, 232), rgb(191, 219, 254))', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'}}>
+                <div style={{background: 'white', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', padding: '32px', maxWidth: '672px', width: '100%', border: '4px solid rgb(192, 132, 252)', position: 'relative', overflow: 'hidden'}}>
+                  <div style={{textAlign: 'center', marginBottom: '24px'}}>
+                    <div style={{fontSize: '96px', marginBottom: '16px'}}>{grade}</div>
+                    <h1 style={{fontSize: '36px', fontWeight: 900, background: 'linear-gradient(to right, rgb(147, 51, 234), rgb(219, 39, 119))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '8px'}}>Игра Завершена!</h1>
+                    <p style={{fontSize: '24px', fontWeight: 700, color: 'rgb(147, 51, 234)'}}>{percentage >= 90 ? 'Отлично!' : percentage >= 70 ? 'Хорошо!' : percentage >= 50 ? 'Неплохо!' : 'Продолжай тренироваться!'}</p>
                   </div>
-                  <div className="grid grid-cols-3 gap-4 mb-6">
-                    <div className="bg-gradient-to-br from-green-400 to-emerald-500 rounded-2xl p-4 text-center shadow-lg">
-                      <div className="text-4xl font-black text-white">{score}</div>
-                      <div className="text-sm font-bold text-white">✓ Правильно</div>
+                  <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px'}}>
+                    <div style={{background: 'linear-gradient(to bottom right, rgb(74, 222, 128), rgb(16, 185, 129))', borderRadius: '16px', padding: '16px', textAlign: 'center', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'}}>
+                      <div style={{fontSize: '36px', fontWeight: 900, color: 'white'}}>{score}</div>
+                      <div style={{fontSize: '14px', fontWeight: 700, color: 'white'}}>✓ Правильно</div>
                     </div>
-                    <div className="bg-gradient-to-br from-blue-400 to-indigo-500 rounded-2xl p-4 text-center shadow-lg">
-                      <div className="text-4xl font-black text-white">{totalRounds}</div>
-                      <div className="text-sm font-bold text-white">📝 Всего</div>
+                    <div style={{background: 'linear-gradient(to bottom right, rgb(96, 165, 250), rgb(99, 102, 241))', borderRadius: '16px', padding: '16px', textAlign: 'center', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'}}>
+                      <div style={{fontSize: '36px', fontWeight: 900, color: 'white'}}>{totalRounds}</div>
+                      <div style={{fontSize: '14px', fontWeight: 700, color: 'white'}}>📝 Всего</div>
                     </div>
-                    <div className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-4 text-center shadow-lg">
-                      <div className="text-4xl font-black text-white">{percentage}%</div>
-                      <div className="text-sm font-bold text-white">📊 Процент</div>
+                    <div style={{background: 'linear-gradient(to bottom right, rgb(250, 204, 21), rgb(249, 115, 22))', borderRadius: '16px', padding: '16px', textAlign: 'center', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'}}>
+                      <div style={{fontSize: '36px', fontWeight: 900, color: 'white'}}>{percentage}%</div>
+                      <div style={{fontSize: '14px', fontWeight: 700, color: 'white'}}>📊 Процент</div>
                     </div>
                   </div>
-                  <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-4 mb-6 border-2 border-purple-300">
-                    <div className="text-center text-xl font-black text-purple-700">⭐ Лучшая серия: {bestStreak} подряд! ⭐</div>
+                  <div style={{background: 'linear-gradient(to right, rgb(243, 232, 255), rgb(252, 231, 243))', borderRadius: '16px', padding: '16px', marginBottom: '24px', border: '2px solid rgb(216, 180, 254)'}}>
+                    <div style={{textAlign: 'center', fontSize: '20px', fontWeight: 900, color: 'rgb(126, 34, 206)'}}>⭐ Лучшая серия: {bestStreak} подряд! ⭐</div>
                   </div>
-                  <div className="mb-6 max-h-80 overflow-y-auto bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-4 border-2 border-purple-300">
-                    <h3 className="font-black text-purple-700 mb-3 text-center text-xl">✨ Твои результаты: ✨</h3>
-                    <div className="space-y-2">
+                  <div style={{marginBottom: '24px', maxHeight: '320px', overflowY: 'auto', background: 'linear-gradient(to bottom right, rgb(250, 245, 255), rgb(252, 231, 243))', borderRadius: '16px', padding: '16px', border: '2px solid rgb(216, 180, 254)'}}>
+                    <h3 style={{fontWeight: 900, color: 'rgb(126, 34, 206)', marginBottom: '12px', textAlign: 'center', fontSize: '20px'}}>✨ Твои результаты: ✨</h3>
+                    <div>
                       {gameHistory.map((item, index) => (
-                        <div key={index} className={`flex justify-between items-center py-3 px-4 rounded-xl shadow-md font-bold text-lg ${item.isCorrect ? 'bg-gradient-to-r from-green-100 to-emerald-100 border-2 border-green-400' : 'bg-gradient-to-r from-red-100 to-rose-100 border-2 border-red-400'}`}>
-                          <span className="text-purple-900">{index + 1}. {item.question} = {item.correctAnswer}</span>
-                          <div className="flex items-center gap-2">
+                        <div key={index} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontWeight: 700, fontSize: '18px', marginBottom: '8px', background: item.isCorrect ? 'linear-gradient(to right, rgb(220, 252, 231), rgb(167, 243, 208))' : 'linear-gradient(to right, rgb(254, 226, 226), rgb(254, 205, 211))', border: item.isCorrect ? '2px solid rgb(74, 222, 128)' : '2px solid rgb(248, 113, 113)'}}>
+                          <span style={{color: 'rgb(88, 28, 135)'}}>{index + 1}. {item.question} = {item.correctAnswer}</span>
+                          <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                             {!item.isCorrect && item.wrongAnswers && item.wrongAnswers.length > 0 && (
-                              <span className="text-sm text-red-600 bg-red-50 px-2 py-1 rounded border border-red-300">Попытки: {item.wrongAnswers.join(', ')}</span>
+                              <span style={{fontSize: '14px', color: 'rgb(220, 38, 38)', background: 'rgb(254, 242, 242)', padding: '4px 8px', borderRadius: '4px', border: '1px solid rgb(252, 165, 165)'}}>Попытки: {item.wrongAnswers.join(', ')}</span>
                             )}
-                            <span className={`text-2xl ${item.isCorrect ? 'text-green-600' : 'text-red-600'}`}>{item.isCorrect ? '✓' : '✗'}</span>
+                            <span style={{fontSize: '24px', color: item.isCorrect ? 'rgb(22, 163, 74)' : 'rgb(220, 38, 38)'}}>{item.isCorrect ? '✓' : '✗'}</span>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
-                  <button onClick={resetGame} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 text-white font-black py-5 text-xl rounded-2xl hover:from-purple-600 hover:via-pink-600 hover:to-purple-600 transition-all shadow-lg">🔄 ИГРАТЬ СНОВА!</button>
+                  <button onClick={resetGame} style={{width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'linear-gradient(to right, rgb(168, 85, 247), rgb(236, 72, 153), rgb(168, 85, 247))', color: 'white', fontWeight: 900, padding: '20px', fontSize: '20px', borderRadius: '16px', border: 'none', cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'}}>🔄 ИГРАТЬ СНОВА!</button>
                 </div>
               </div>
             );
           }
 
           return (
-            <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
-              <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-purple-400 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"></div>
-                <div className="text-center mb-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex-1"></div>
-                    <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 flex-1">🔢 Таблица умножения 🔢</h1>
-                    <button onClick={() => setSoundEnabled(!soundEnabled)} className="flex-1 flex justify-end text-3xl">{soundEnabled ? '🔊' : '🔇'}</button>
+            <div style={{minHeight: '100vh', background: 'linear-gradient(to bottom right, rgb(233, 213, 255), rgb(251, 207, 232), rgb(191, 219, 254))', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'}}>
+              <div style={{background: 'white', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', padding: '32px', maxWidth: '448px', width: '100%', border: '4px solid rgb(192, 132, 252)'}}>
+                <div style={{textAlign: 'center', marginBottom: '24px'}}>
+                  <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px'}}>
+                    <div style={{flex: 1}}></div>
+                    <h1 style={{fontSize: '24px', fontWeight: 900, background: 'linear-gradient(to right, rgb(147, 51, 234), rgb(219, 39, 119))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', flex: 1}}>🔢 Таблица умножения 🔢</h1>
+                    <button onClick={() => setSoundEnabled(!soundEnabled)} style={{flex: 1, display: 'flex', justifyContent: 'flex-end', fontSize: '28px', background: 'none', border: 'none', cursor: 'pointer'}}>{soundEnabled ? '🔊' : '🔇'}</button>
                   </div>
-                  <p className="text-purple-600 font-bold text-lg">Пример {currentRound + 1} из {totalRounds}</p>
+                  <p style={{color: 'rgb(147, 51, 234)', fontWeight: 700, fontSize: '18px'}}>Пример {currentRound + 1} из {totalRounds}</p>
                 </div>
-                <div className="grid grid-cols-3 gap-3 mb-6">
-                  <div className="bg-gradient-to-br from-green-400 to-emerald-500 rounded-2xl p-3 text-center shadow-lg">
-                    <div className="text-2xl font-black text-white">{score}</div>
-                    <div className="text-xs font-bold text-white">✓ Верно</div>
+                <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px'}}>
+                  <div style={{background: 'linear-gradient(to bottom right, rgb(74, 222, 128), rgb(16, 185, 129))', borderRadius: '16px', padding: '12px', textAlign: 'center'}}>
+                    <div style={{fontSize: '24px', fontWeight: 900, color: 'white'}}>{score}</div>
+                    <div style={{fontSize: '12px', fontWeight: 700, color: 'white'}}>✓ Верно</div>
                   </div>
-                  <div className="bg-gradient-to-br from-blue-400 to-indigo-500 rounded-2xl p-3 text-center shadow-lg">
-                    <div className="text-2xl font-black text-white">{currentRound}</div>
-                    <div className="text-xs font-bold text-white">📝 Решено</div>
+                  <div style={{background: 'linear-gradient(to bottom right, rgb(96, 165, 250), rgb(99, 102, 241))', borderRadius: '16px', padding: '12px', textAlign: 'center'}}>
+                    <div style={{fontSize: '24px', fontWeight: 900, color: 'white'}}>{currentRound}</div>
+                    <div style={{fontSize: '12px', fontWeight: 700, color: 'white'}}>📝 Решено</div>
                   </div>
-                  <div className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-3 text-center shadow-lg">
-                    <div className="text-2xl font-black text-white">{percentage}%</div>
-                    <div className="text-xs font-bold text-white">📊</div>
+                  <div style={{background: 'linear-gradient(to bottom right, rgb(250, 204, 21), rgb(249, 115, 22))', borderRadius: '16px', padding: '12px', textAlign: 'center'}}>
+                    <div style={{fontSize: '24px', fontWeight: 900, color: 'white'}}>{percentage}%</div>
+                    <div style={{fontSize: '12px', fontWeight: 700, color: 'white'}}>📊</div>
                   </div>
                 </div>
-                <div className="flex items-center justify-center gap-2 mb-6 bg-gradient-to-r from-yellow-100 to-orange-100 p-3 rounded-2xl border-2 border-yellow-400 shadow-inner">
-                  <span className="text-2xl">⭐</span>
-                  <span className="text-lg font-black text-orange-700">Серия: {streak} 🔥</span>
-                  {bestStreak > 0 && <span className="text-sm font-bold text-orange-600 ml-2">(макс: {bestStreak})</span>}
+                <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '24px', background: 'linear-gradient(to right, rgb(254, 249, 195), rgb(254, 243, 199))', padding: '12px', borderRadius: '16px', border: '2px solid rgb(250, 204, 21)'}}>
+                  <span style={{fontSize: '24px'}}>⭐</span>
+                  <span style={{fontSize: '18px', fontWeight: 900, color: 'rgb(194, 65, 12)'}}>Серия: {streak} 🔥</span>
+                  {bestStreak > 0 && <span style={{fontSize: '14px', fontWeight: 700, color: 'rgb(234, 88, 12)', marginLeft: '8px'}}>(макс: {bestStreak})</span>}
                 </div>
-                <div className="bg-gradient-to-br from-purple-100 via-pink-100 to-blue-100 rounded-3xl p-6 mb-6 border-3 border-purple-300 shadow-xl">
-                  <div className="flex justify-center gap-3 mb-4">
-                    {[...Array(2)].map((_, i) => (<span key={i} className="text-4xl">{lives > i ? '❤️' : '🤍'}</span>))}
+                <div style={{background: 'linear-gradient(to bottom right, rgb(243, 232, 255), rgb(252, 231, 243), rgb(219, 234, 254))', borderRadius: '24px', padding: '24px', marginBottom: '24px', border: '3px solid rgb(216, 180, 254)'}}>
+                  <div style={{display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '16px'}}>
+                    {[...Array(2)].map((_, i) => (<span key={i} style={{fontSize: '32px'}}>{lives > i ? '❤️' : '🤍'}</span>))}
                   </div>
-                  <div className="text-center mb-6 bg-white p-4 rounded-2xl border-3 border-purple-300 shadow-inner">
-                    <div className="flex items-center justify-center gap-3 flex-wrap">
-                      <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">{num1}</span>
-                      <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">×</span>
-                      <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">{num2}</span>
-                      <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">=</span>
-                      <input type="text" inputMode="numeric" pattern="[0-9]*" value={answer} onChange={(e) => setAnswer(e.target.value.replace(/[^0-9]/g, ''))} onKeyPress={handleKeyPress} className="w-24 text-5xl text-center border-4 border-purple-400 rounded-xl p-2 focus:outline-none focus:border-pink-500 font-black text-purple-700 bg-yellow-50 shadow-lg" placeholder="?" autoFocus />
+                  <div style={{textAlign: 'center', marginBottom: '24px', background: 'white', padding: '16px', borderRadius: '16px', border: '3px solid rgb(216, 180, 254)'}}>
+                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap'}}>
+                      <span style={{fontSize: '48px', fontWeight: 900, background: 'linear-gradient(to right, rgb(147, 51, 234), rgb(219, 39, 119))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'}}>{num1}</span>
+                      <span style={{fontSize: '48px', fontWeight: 900, background: 'linear-gradient(to right, rgb(147, 51, 234), rgb(219, 39, 119))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'}}>×</span>
+                      <span style={{fontSize: '48px', fontWeight: 900, background: 'linear-gradient(to right, rgb(147, 51, 234), rgb(219, 39, 119))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'}}>{num2}</span>
+                      <span style={{fontSize: '48px', fontWeight: 900, background: 'linear-gradient(to right, rgb(147, 51, 234), rgb(219, 39, 119))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'}}>=</span>
+                      <input type="text" inputMode="numeric" pattern="[0-9]*" value={answer} onChange={(e) => setAnswer(e.target.value.replace(/[^0-9]/g, ''))} onKeyPress={handleKeyPress} style={{width: '96px', fontSize: '48px', textAlign: 'center', border: '4px solid rgb(192, 132, 252)', borderRadius: '12px', padding: '8px', fontWeight: 900, color: 'rgb(107, 33, 168)', background: 'rgb(254, 252, 232)'}} placeholder="?" autoFocus />
                     </div>
                   </div>
-                  <button onClick={checkAnswer} disabled={answer === ''} className="w-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 text-white text-xl font-black py-4 rounded-2xl hover:from-purple-600 hover:via-pink-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 shadow-lg">ПРОВЕРИТЬ ✨</button>
-                </div>
-                {message && (
-                  <div className={`text-center text-xl font-black mb-4 p-4 rounded-2xl border-3 shadow-lg ${message.includes('Правильно') ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border-green-400' : message.includes('Подумай') ? 'bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-700 border-yellow-400' : 'bg-gradient-to-r from-red-100 to-rose-100 text-red-700 border-red-400'}`}>{message}</div>
-                )}
-                {score >= 5 && currentRound < totalRounds && (
-                  <div className="mt-6 text-center bg-gradient-to-r from-yellow-100 to-orange-100 p-4 rounded-2xl border-2 border-yellow-400 shadow-lg">
-                    <div className="text-4xl mb-2">🏆</div>
-                    <div className="text-yellow-800 font-black text-lg">⭐ Супер! Ты отлично справляешься! ⭐</div>
-                  </div>
-                )}
+                  <button onClick={checkAnswer} disabled={answer === ''} style={{width: '100%', background: answer === '' ? 'rgb(209, 213, 219)' : 'linear-gradient(to right, rgb(168, 85, 247), rgb(236, 72, 153), rgb(168, 85, 247))', color: 'white', fontSize: '20px', fontWeight: 900, padding: '16px', borderRadius: '16px', border: 'none',
