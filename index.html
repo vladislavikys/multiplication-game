@@ -14,11 +14,50 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
+        // 🔑 СПИСОК АКТИВАЦИОННЫХ КОДОВ (100 штук)
+        const ACTIVATION_CODES = {
+          '7A4B-9F2E': 10, '3K8D-5M1R': 10, 'Q2W6-E4RT': 10, '9P0L-K3J7': 10, 
+          'H6G5-F4D8': 10, 'N1M2-V3B9': 10, 'Z7X8-C6V5': 10, 'A9S8-D7F6': 10,
+          'G4H3-J2K1': 10, 'L5P6-O7I8': 10, 'U9Y8-T7R6': 10, 'E5W4-Q3A2': 10,
+          'S1D2-F3G4': 10, 'H5J6-K7L8': 10, 'Z9X8-C7V6': 10, 'B5N4-M3Q2': 10,
+          'W1E2-R3T4': 10, 'Y5U6-I7O8': 10, 'P9A8-S7D6': 10, 'F5G4-H3J2': 10,
+          'K1L2-Z3X4': 10, 'C5V6-B7N8': 10, 'M9Q2-W3E4': 10, 'R5T6-Y7U8': 10,
+          'I9O8-P7L6': 10, 'K5J4-H3G2': 10, 'F1D2-S3A4': 10, 'Q5W6-E7R8': 10,
+          'T9Y8-U7I6': 10, 'O5P4-L3K2': 10, 'J1H2-G3F4': 10, 'D5S6-A7Z8': 10,
+          'X9C8-V7B6': 10, 'N5M4-Q3W2': 10, 'E1R2-T3Y4': 10, 'U5I6-O7P8': 10,
+          'A9S8-D7F6': 10, 'G5H4-J3K2': 10, 'L1Z2-X3C4': 10, 'V5B6-N7M8': 10,
+          'Q9W8-E7R6': 10, 'T5Y4-U3I2': 10, 'O1P2-L3K4': 10, 'J5H6-G7F8': 10,
+          'D9S8-A7Q6': 10, 'W5E4-R3T2': 10, 'Y1U2-I3O4': 10, 'P5A6-S7D8': 10,
+          'F9G8-H7J6': 10, 'K5L4-Z3X2': 10, 'C1V2-B3N4': 10, 'M5Q6-W7E8': 10,
+          'R9T8-Y7U6': 10, 'I5O4-P3L2': 10, 'K1J2-H3G4': 10, 'F5D6-S7A8': 10,
+          'Q9W8-E7R6': 10, 'T5Y4-U3I2': 10, 'O1P2-L3K4': 10, 'J5H6-G7F8': 10,
+          '2B7C-4M9N': 10, '6K3L-8P1Q': 10, '5R9S-2T4W': 10, '8E1F-7G3H': 10,
+          '4J6K-9L2M': 10, '3N5O-7P8Q': 10, '1R2S-4T6U': 10, '9V8W-5X3Y': 10,
+          '7Z2A-6B4C': 10, '3D5E-8F9G': 10, '6H4I-2J7K': 10, '5L9M-3N1O': 10,
+          '8P2Q-7R4S': 10, '4T6U-9V3W': 10, '2X5Y-8Z1A': 10, '7B3C-6D5E': 10,
+          '9F4G-2H8I': 10, '3J7K-5L1M': 10, '6N8O-4P9Q': 10, '2R5S-7T3U': 10,
+          '8V1W-6X4Y': 10, '5Z9A-3B2C': 10, '4D7E-8F6G': 10, '9H2I-5J3K': 10,
+          '7L6M-4N8O': 10, '3P1Q-9R5S': 10, '6T4U-2V7W': 10, '8X5Y-3Z9A': 10,
+          '2B6C-7D4E': 10, '5F9G-8H3I': 10, '4J2K-6L7M': 10, '9N5O-3P1Q': 10,
+          '7R8S-2T4U': 10, '3V6W-5X9Y': 10, '8Z4A-7B2C': 10, '6D1E-9F5G': 10,
+          '2H7I-4J8K': 10, '5L3M-9N6O': 10, '8P2Q-7R1S': 10, '4T9U-3V5W': 10
+        };
+
         function MultiplicationGame() {
-          const [gameState, setGameState] = useState('setup');
+          const [gameState, setGameState] = useState('activation');
+          const [activationCode, setActivationCode] = useState('');
+          const [gamesLeft, setGamesLeft] = useState(0);
+          const [showActivation, setShowActivation] = useState(false);
           const [totalRounds, setTotalRounds] = useState(10);
+          const [operations, setOperations] = useState({
+            multiply: true,
+            divide: false,
+            add: false,
+            subtract: false
+          });
           const [num1, setNum1] = useState(0);
           const [num2, setNum2] = useState(0);
+          const [currentOperation, setCurrentOperation] = useState('×');
           const [answer, setAnswer] = useState('');
           const [score, setScore] = useState(0);
           const [currentRound, setCurrentRound] = useState(0);
@@ -38,7 +77,38 @@
             } catch (e) {
               console.log('Audio not supported');
             }
+            
+            const saved = localStorage.getItem('gamesLeft');
+            if (saved && parseInt(saved) > 0) {
+              setGamesLeft(parseInt(saved));
+              setGameState('setup');
+            } else {
+              setGameState('activation');
+            }
           }, []);
+
+          const toggleOperation = (op) => {
+            const newOps = { ...operations, [op]: !operations[op] };
+            const hasAtLeastOne = Object.values(newOps).some(v => v);
+            if (hasAtLeastOne) {
+              setOperations(newOps);
+            }
+          };
+
+          const activateCode = () => {
+            const code = activationCode.toUpperCase().trim();
+            if (ACTIVATION_CODES[code]) {
+              const newGamesLeft = gamesLeft + ACTIVATION_CODES[code];
+              setGamesLeft(newGamesLeft);
+              localStorage.setItem('gamesLeft', newGamesLeft);
+              setActivationCode('');
+              setShowActivation(false);
+              setGameState('setup');
+              alert(`✅ Код активирован! Добавлено ${ACTIVATION_CODES[code]} игр. Всего игр: ${newGamesLeft}`);
+            } else {
+              alert('❌ Неверный код активации!');
+            }
+          };
 
           const speak = (text) => {
             if (!soundEnabled) return;
@@ -88,6 +158,16 @@
           };
 
           const startGame = () => {
+            if (gamesLeft <= 0) {
+              alert('❌ У вас закончились игры! Введите код активации.');
+              setShowActivation(true);
+              return;
+            }
+            
+            const newGamesLeft = gamesLeft - 1;
+            setGamesLeft(newGamesLeft);
+            localStorage.setItem('gamesLeft', newGamesLeft);
+            
             setGameState('playing');
             setScore(0);
             setCurrentRound(0);
@@ -98,8 +178,29 @@
           };
 
           const generateQuestion = () => {
-            const n1 = Math.floor(Math.random() * 10) + 1;
-            const n2 = Math.floor(Math.random() * 10) + 1;
+            const activeOps = [];
+            if (operations.multiply) activeOps.push('×');
+            if (operations.divide) activeOps.push('÷');
+            if (operations.add) activeOps.push('+');
+            if (operations.subtract) activeOps.push('−');
+            
+            const op = activeOps[Math.floor(Math.random() * activeOps.length)];
+            setCurrentOperation(op);
+            
+            let n1, n2;
+            if (op === '÷') {
+              n2 = Math.floor(Math.random() * 9) + 2;
+              const result = Math.floor(Math.random() * 10) + 1;
+              n1 = n2 * result;
+            } else if (op === '−') {
+              n1 = Math.floor(Math.random() * 10) + 11;
+              n2 = Math.floor(Math.random() * 10) + 1;
+              if (n2 >= n1) n2 = n1 - 1;
+            } else {
+              n1 = Math.floor(Math.random() * 10) + 1;
+              n2 = Math.floor(Math.random() * 10) + 1;
+            }
+            
             setNum1(n1);
             setNum2(n2);
             setAnswer('');
@@ -108,13 +209,23 @@
             setLives(2);
           };
 
+          const calculateCorrectAnswer = () => {
+            switch(currentOperation) {
+              case '×': return num1 * num2;
+              case '÷': return num1 / num2;
+              case '+': return num1 + num2;
+              case '−': return num1 - num2;
+              default: return 0;
+            }
+          };
+
           const showResults = () => {
             setGameState('results');
           };
 
           const checkAnswer = () => {
             const userAnswer = parseInt(answer);
-            const correctAnswer = num1 * num2;
+            const correctAnswer = calculateCorrectAnswer();
             const isCorrect = userAnswer === correctAnswer;
             
             if (isCorrect) {
@@ -126,9 +237,9 @@
               if ((streak + 1) % 5 === 0) setTimeout(playStreakSound, 300);
               setMessage('🎉 Правильно! Ты молодец!');
               
-              const existingWrong = gameHistory.find(h => h.question === `${num1} × ${num2}` && !h.isCorrect);
-              setGameHistory([...gameHistory.filter(h => !(h.question === `${num1} × ${num2}` && !h.isCorrect)), {
-                question: `${num1} × ${num2}`,
+              const existingWrong = gameHistory.find(h => h.question === `${num1} ${currentOperation} ${num2}` && !h.isCorrect);
+              setGameHistory([...gameHistory.filter(h => !(h.question === `${num1} ${currentOperation} ${num2}` && !h.isCorrect)), {
+                question: `${num1} ${currentOperation} ${num2}`,
                 userAnswer,
                 correctAnswer,
                 isCorrect: true,
@@ -150,10 +261,10 @@
                 setLives(lives - 1);
                 setMessage('🤔 Подумай ещё');
                 
-                const existingEntry = gameHistory.find(h => h.question === `${num1} × ${num2}` && !h.isCorrect);
+                const existingEntry = gameHistory.find(h => h.question === `${num1} ${currentOperation} ${num2}` && !h.isCorrect);
                 const wrongAnswers = existingEntry?.wrongAnswers ? [...existingEntry.wrongAnswers, userAnswer] : [userAnswer];
-                setGameHistory([...gameHistory.filter(h => !(h.question === `${num1} × ${num2}` && !h.isCorrect)), {
-                  question: `${num1} × ${num2}`,
+                setGameHistory([...gameHistory.filter(h => !(h.question === `${num1} ${currentOperation} ${num2}` && !h.isCorrect)), {
+                  question: `${num1} ${currentOperation} ${num2}`,
                   userAnswer,
                   correctAnswer,
                   isCorrect: false,
@@ -166,10 +277,10 @@
                 setStreak(0);
                 setMessage(`❌ Неверно. Правильный ответ: ${correctAnswer}`);
                 
-                const existingEntry = gameHistory.find(h => h.question === `${num1} × ${num2}` && !h.isCorrect);
+                const existingEntry = gameHistory.find(h => h.question === `${num1} ${currentOperation} ${num2}` && !h.isCorrect);
                 const wrongAnswers = existingEntry?.wrongAnswers ? [...existingEntry.wrongAnswers, userAnswer] : [userAnswer];
-                setGameHistory([...gameHistory.filter(h => !(h.question === `${num1} × ${num2}` && !h.isCorrect)), {
-                  question: `${num1} × ${num2}`,
+                setGameHistory([...gameHistory.filter(h => !(h.question === `${num1} ${currentOperation} ${num2}` && !h.isCorrect)), {
+                  question: `${num1} ${currentOperation} ${num2}`,
                   userAnswer,
                   correctAnswer,
                   isCorrect: false,
@@ -191,6 +302,10 @@
             if (e.key === 'Enter' && answer !== '') checkAnswer();
           };
 
+          const handleActivationKeyPress = (e) => {
+            if (e.key === 'Enter' && activationCode !== '') activateCode();
+          };
+
           const resetGame = () => {
             setGameState('setup');
             setTotalRounds(10);
@@ -203,23 +318,144 @@
             backgroundSize: '60px 60px'
           };
 
+          if (gameState === 'activation') {
+            return (
+              <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
+                <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-red-400">
+                  <div className="text-center mb-8">
+                    <div className="text-6xl mb-4">🔐</div>
+                    <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-600 mb-2">
+                      Требуется активация
+                    </h1>
+                    <p className="text-gray-700 font-bold text-lg mb-4">У вас 0 доступных игр</p>
+                    <p className="text-gray-600 text-sm">Введите код активации для начала игры</p>
+                  </div>
+
+                  <div className="mb-6">
+                    <input
+                      type="text"
+                      value={activationCode}
+                      onChange={(e) => setActivationCode(e.target.value.toUpperCase())}
+                      onKeyPress={handleActivationKeyPress}
+                      placeholder="XXXX-XXXX"
+                      maxLength="9"
+                      className="w-full text-3xl text-center border-4 border-red-300 rounded-2xl p-4 focus:outline-none focus:border-red-500 font-bold uppercase tracking-widest"
+                      autoFocus
+                    />
+                  </div>
+
+                  <button
+                    onClick={activateCode}
+                    className="w-full bg-gradient-to-r from-red-500 to-orange-500 text-white text-2xl font-black py-5 rounded-2xl hover:from-red-600 hover:to-orange-600 transition-all transform hover:scale-105 shadow-lg mb-4"
+                  >
+                    АКТИВИРОВАТЬ
+                  </button>
+
+                  <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4 text-sm text-blue-800">
+                    <p className="font-bold mb-2">ℹ️ Как получить код?</p>
+                    <p>Свяжитесь с администратором для покупки кода активации. Каждый код даёт доступ к 10 играм.</p>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
           if (gameState === 'setup') {
             return (
               <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
                 <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-purple-400 relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"></div>
                   
+                  <div className="absolute top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-full font-bold shadow-lg">
+                    🎮 Игр: {gamesLeft}
+                  </div>
+
+                  {showActivation && (
+                    <div className="mb-6 bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4">
+                      <p className="font-bold text-yellow-800 mb-2">🔑 Добавить игры:</p>
+                      <input
+                        type="text"
+                        value={activationCode}
+                        onChange={(e) => setActivationCode(e.target.value.toUpperCase())}
+                        onKeyPress={handleActivationKeyPress}
+                        placeholder="XXXX-XXXX"
+                        maxLength="9"
+                        className="w-full text-xl text-center border-2 border-yellow-400 rounded-xl p-2 mb-2 font-bold uppercase"
+                      />
+                      <button
+                        onClick={activateCode}
+                        className="w-full bg-yellow-500 text-white font-bold py-2 rounded-xl hover:bg-yellow-600"
+                      >
+                        Активировать
+                      </button>
+                      <button
+                        onClick={() => setShowActivation(false)}
+                        className="w-full mt-2 text-gray-600 font-semibold"
+                      >
+                        Отмена
+                      </button>
+                    </div>
+                  )}
+                  
                   <div className="text-center mb-8">
                     <div className="text-6xl mb-4">🔢</div>
                     <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 mb-2">
-                      Таблица Умножения
+                      Математика
                     </h1>
-                    <p className="text-purple-600 font-bold text-lg">Математическое Приключение!</p>
+                    <p className="text-purple-600 font-bold text-lg">Выбери операции!</p>
                   </div>
 
                   <div className="mb-6 bg-gradient-to-r from-purple-100 to-pink-100 p-6 rounded-2xl border-2 border-purple-300">
                     <label className="block text-purple-800 font-bold mb-3 text-center text-lg">
-                      🎯 Сколько примеров хочешь решить?
+                      🎯 Какие операции?
+                    </label>
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      <button
+                        onClick={() => toggleOperation('multiply')}
+                        className={`py-4 rounded-xl font-black text-2xl transition-all transform hover:scale-105 ${
+                          operations.multiply 
+                            ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-lg' 
+                            : 'bg-white text-purple-500 border-2 border-purple-300'
+                        }`}
+                      >
+                        × Умножение
+                      </button>
+                      <button
+                        onClick={() => toggleOperation('divide')}
+                        className={`py-4 rounded-xl font-black text-2xl transition-all transform hover:scale-105 ${
+                          operations.divide 
+                            ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg' 
+                            : 'bg-white text-blue-500 border-2 border-blue-300'
+                        }`}
+                      >
+                        ÷ Деление
+                      </button>
+                      <button
+                        onClick={() => toggleOperation('add')}
+                        className={`py-4 rounded-xl font-black text-2xl transition-all transform hover:scale-105 ${
+                          operations.add 
+                            ? 'bg-gradient-to-br from-green-500 to-green-600 text-white shadow-lg' 
+                            : 'bg-white text-green-500 border-2 border-green-300'
+                        }`}
+                      >
+                        + Сложение
+                      </button>
+                      <button
+                        onClick={() => toggleOperation('subtract')}
+                        className={`py-4 rounded-xl font-black text-2xl transition-all transform hover:scale-105 ${
+                          operations.subtract 
+                            ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg' 
+                            : 'bg-white text-orange-500 border-2 border-orange-300'
+                        }`}
+                      >
+                        − Вычитание
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mb-6 bg-gradient-to-r from-purple-100 to-pink-100 p-6 rounded-2xl border-2 border-purple-300">
+                    <label className="block text-purple-800 font-bold mb-3 text-center text-lg">
+                      📝 Сколько примеров?
                     </label>
                     <div className="text-center mb-4">
                       <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
@@ -243,25 +479,21 @@
                       <span>25</span>
                       <span>50</span>
                     </div>
-                    <p className="text-sm text-purple-600 mt-3 text-center font-semibold">
-                      ⭐ Перетащи ползунок
-                    </p>
                   </div>
 
                   <button
                     onClick={startGame}
-                    className="w-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 text-white text-2xl font-black py-5 rounded-2xl hover:from-purple-600 hover:via-pink-600 hover:to-purple-600 transition-all transform hover:scale-105 flex items-center justify-center gap-3 shadow-lg"
+                    className="w-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 text-white text-2xl font-black py-5 rounded-2xl hover:from-purple-600 hover:via-pink-600 hover:to-purple-600 transition-all transform hover:scale-105 flex items-center justify-center gap-3 shadow-lg mb-4"
                   >
                     ▶ ПОЕХАЛИ!
                   </button>
-                  
-                  <div className="mt-4 flex justify-center gap-4 text-4xl opacity-50">
-                    <span>÷</span>
-                    <span>+</span>
-                    <span>−</span>
-                    <span>×</span>
-                    <span>=</span>
-                  </div>
+
+                  <button
+                    onClick={() => setShowActivation(!showActivation)}
+                    className="w-full bg-gray-200 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-300"
+                  >
+                    🔑 Добавить игры
+                  </button>
                 </div>
               </div>
             );
@@ -275,6 +507,10 @@
                 <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full border-4 border-purple-400 relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"></div>
                   
+                  <div className="absolute top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-full font-bold shadow-lg">
+                    🎮 Осталось: {gamesLeft}
+                  </div>
+                  
                   <div className="text-center mb-6">
                     <div className="text-8xl mb-4">{grade}</div>
                     <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 mb-2">
@@ -287,188 +523,187 @@
 
                   <div className="grid grid-cols-3 gap-4 mb-6">
                     <div className="bg-gradient-to-br from-green-400 to-emerald-500 rounded-2xl p-4 text-center shadow-lg">
-                      <div className="text-4xl font-black text-white">{score}</div>
-                      <div className="text-sm font-bold text-white">✓ Правильно</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-blue-400 to-indigo-500 rounded-2xl p-4 text-center shadow-lg">
-                      <div className="text-4xl font-black text-white">{totalRounds}</div>
-                      <div className="text-sm font-bold text-white">📝 Всего</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-4 text-center shadow-lg">
-                      <div className="text-4xl font-black text-white">{percentage}%</div>
-                      <div className="text-sm font-bold text-white">📊 Процент</div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-4 mb-6 border-2 border-purple-300">
-                    <div className="text-center text-xl font-black text-purple-700">
-                      ⭐ Лучшая серия: {bestStreak} подряд! ⭐
-                    </div>
-                  </div>
-
-                  <div className="mb-6 max-h-80 overflow-y-auto bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-4 border-2 border-purple-300">
-                    <h3 className="font-black text-purple-700 mb-3 text-center text-xl">
-                      ✨ Твои результаты: ✨
-                    </h3>
-                    <div className="space-y-2">
-                      {gameHistory.map((item, index) => (
-                        <div key={index} className={`flex justify-between items-center py-3 px-4 rounded-xl shadow-md font-bold text-lg ${
-                          item.isCorrect ? 'bg-gradient-to-r from-green-100 to-emerald-100 border-2 border-green-400' : 'bg-gradient-to-r from-red-100 to-rose-100 border-2 border-red-400'
-                        }`}>
-                          <span className="text-purple-900">
-                            {index + 1}. {item.question} = {item.correctAnswer}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            {!item.isCorrect && item.wrongAnswers && item.wrongAnswers.length > 0 && (
-                              <span className="text-sm text-red-600 bg-red-50 px-2 py-1 rounded border border-red-300">
-                                Попытки: {item.wrongAnswers.join(', ')}
-                              </span>
-                            )}
-                            <span className={`text-2xl ${item.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
-                              {item.isCorrect ? '✓' : '✗'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={resetGame}
-                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 text-white font-black py-5 text-xl rounded-2xl hover:from-purple-600 hover:via-pink-600 hover:to-purple-600 transition-all shadow-lg"
-                  >
-                    🔄 ИГРАТЬ СНОВА!
-                  </button>
+<div className="text-4xl font-black text-white">{score}</div>
+<div className="text-sm font-bold text-white">✓ Правильно</div>
+</div>
+<div className="bg-gradient-to-br from-blue-400 to-indigo-500 rounded-2xl p-4 text-center shadow-lg">
+<div className="text-4xl font-black text-white">{totalRounds}</div>
+<div className="text-sm font-bold text-white">📝 Всего</div>
+</div>
+<div className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-4 text-center shadow-lg">
+<div className="text-4xl font-black text-white">{percentage}%</div>
+<div className="text-sm font-bold text-white">📊 Процент</div>
+</div>
+</div>
+<div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-4 mb-6 border-2 border-purple-300">
+                <div className="text-center text-xl font-black text-purple-700">
+                  ⭐ Лучшая серия: {bestStreak} подряд! ⭐
                 </div>
               </div>
-            );
-          }
 
-          return (
-            <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
-              <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-purple-400 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"></div>
-                
-                <div className="text-center mb-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex-1"></div>
-                    <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 flex-1">
-                      🔢 Таблица умножения 🔢
-                    </h1>
-                    <button
-                      onClick={() => setSoundEnabled(!soundEnabled)}
-                      className="flex-1 flex justify-end text-3xl"
-                      style={{background: 'none', border: 'none', cursor: 'pointer'}}
-                    >
-                      {soundEnabled ? '🔊' : '🔇'}
-                    </button>
-                  </div>
-                  <p className="text-purple-600 font-bold text-lg">Пример {currentRound + 1} из {totalRounds}</p>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3 mb-6">
-                  <div className="bg-gradient-to-br from-green-400 to-emerald-500 rounded-2xl p-3 text-center shadow-lg">
-                    <div className="text-2xl font-black text-white">{score}</div>
-                    <div className="text-xs font-bold text-white">✓ Верно</div>
-                  </div>
-                  <div className="bg-gradient-to-br from-blue-400 to-indigo-500 rounded-2xl p-3 text-center shadow-lg">
-                    <div className="text-2xl font-black text-white">{currentRound}</div>
-                    <div className="text-xs font-bold text-white">📝 Решено</div>
-                  </div>
-                  <div className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-3 text-center shadow-lg">
-                    <div className="text-2xl font-black text-white">{percentage}%</div>
-                    <div className="text-xs font-bold text-white">📊</div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-center gap-2 mb-6 bg-gradient-to-r from-yellow-100 to-orange-100 p-3 rounded-2xl border-2 border-yellow-400 shadow-inner">
-                  <span className="text-2xl">⭐</span>
-                  <span className="text-lg font-black text-orange-700">
-                    Серия: {streak} 🔥
-                  </span>
-                  {bestStreak > 0 && (
-                    <span className="text-sm font-bold text-orange-600 ml-2">
-                      (макс: {bestStreak})
-                    </span>
-                  )}
-                </div>
-
-                <div className="bg-gradient-to-br from-purple-100 via-pink-100 to-blue-100 rounded-3xl p-6 mb-6 border-3 border-purple-300 shadow-xl">
-                  <div className="flex justify-center gap-3 mb-4">
-                    {[...Array(2)].map((_, i) => (
-                      <span key={i} className="text-4xl">
-                        {lives > i ? '❤️' : '🤍'}
+              <div className="mb-6 max-h-80 overflow-y-auto bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-4 border-2 border-purple-300">
+                <h3 className="font-black text-purple-700 mb-3 text-center text-xl">
+                  ✨ Твои результаты: ✨
+                </h3>
+                <div className="space-y-2">
+                  {gameHistory.map((item, index) => (
+                    <div key={index} className={`flex justify-between items-center py-3 px-4 rounded-xl shadow-md font-bold text-lg ${
+                      item.isCorrect ? 'bg-gradient-to-r from-green-100 to-emerald-100 border-2 border-green-400' : 'bg-gradient-to-r from-red-100 to-rose-100 border-2 border-red-400'
+                    }`}>
+                      <span className="text-purple-900">
+                        {index + 1}. {item.question} = {item.correctAnswer}
                       </span>
-                    ))}
-                  </div>
-                  
-                  <div className="text-center mb-6 bg-white p-4 rounded-2xl border-3 border-purple-300 shadow-inner">
-                    <div className="flex items-center justify-center gap-3 flex-wrap">
-                      <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
-                        {num1}
-                      </span>
-                      <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
-                        ×
-                      </span>
-                      <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
-                        {num2}
-                      </span>
-                      <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
-                        =
-                      </span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        value={answer}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/[^0-9]/g, '');
-                          setAnswer(value);
-                        }}
-                        onKeyPress={handleKeyPress}
-                        className="w-24 text-5xl text-center border-4 border-purple-400 rounded-xl p-2 focus:outline-none focus:border-pink-500 font-black text-purple-700 bg-yellow-50 shadow-lg"
-                        placeholder="?"
-                        autoFocus
-                      />
+                      <div className="flex items-center gap-2">
+                        {!item.isCorrect && item.wrongAnswers && item.wrongAnswers.length > 0 && (
+                          <span className="text-sm text-red-600 bg-red-50 px-2 py-1 rounded border border-red-300">
+                            Попытки: {item.wrongAnswers.join(', ')}
+                          </span>
+                        )}
+                        <span className={`text-2xl ${item.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                          {item.isCorrect ? '✓' : '✗'}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-
-                  <button
-                    onClick={checkAnswer}
-                    disabled={answer === ''}
-                    className="w-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 text-white text-xl font-black py-4 rounded-2xl hover:from-purple-600 hover:via-pink-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 shadow-lg"
-                  >
-                    ПРОВЕРИТЬ ✨
-                  </button>
+                  ))}
                 </div>
+              </div>
 
-                {message && (
-                  <div className={`text-center text-xl font-black mb-4 p-4 rounded-2xl border-3 shadow-lg ${
-                    message.includes('Правильно') 
-                      ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border-green-400' 
-                      : message.includes('Подумай')
-                      ? 'bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-700 border-yellow-400'
-                      : 'bg-gradient-to-r from-red-100 to-rose-100 text-red-700 border-red-400'
-                  }`}>
-                    {message}
-                  </div>
-                )}
+              <button
+                onClick={resetGame}
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 text-white font-black py-5 text-xl rounded-2xl hover:from-purple-600 hover:via-pink-600 hover:to-purple-600 transition-all shadow-lg"
+              >
+                🔄 ИГРАТЬ СНОВА!
+              </button>
+            </div>
+          </div>
+        );
+      }
 
-                {score >= 5 && currentRound < totalRounds && (
-                  <div className="mt-6 text-center bg-gradient-to-r from-yellow-100 to-orange-100 p-4 rounded-2xl border-2 border-yellow-400 shadow-lg">
-                    <div className="text-4xl mb-2">🏆</div>
-                    <div className="text-yellow-800 font-black text-lg">
-                      ⭐ Супер! Ты отлично справляешься! ⭐
-                    </div>
-                  </div>
-                )}
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
+          <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-purple-400 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"></div>
+            
+            <div className="text-center mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex-1"></div>
+                <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 flex-1">
+                  🔢 Математика 🔢
+                </h1>
+                <button
+                  onClick={() => setSoundEnabled(!soundEnabled)}
+                  className="flex-1 flex justify-end text-3xl"
+                  style={{background: 'none', border: 'none', cursor: 'pointer'}}
+                >
+                  {soundEnabled ? '🔊' : '🔇'}
+                </button>
+              </div>
+              <p className="text-purple-600 font-bold text-lg">Пример {currentRound + 1} из {totalRounds}</p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="bg-gradient-to-br from-green-400 to-emerald-500 rounded-2xl p-3 text-center shadow-lg">
+                <div className="text-2xl font-black text-white">{score}</div>
+                <div className="text-xs font-bold text-white">✓ Верно</div>
+              </div>
+              <div className="bg-gradient-to-br from-blue-400 to-indigo-500 rounded-2xl p-3 text-center shadow-lg">
+                <div className="text-2xl font-black text-white">{currentRound}</div>
+                <div className="text-xs font-bold text-white">📝 Решено</div>
+              </div>
+              <div className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-3 text-center shadow-lg">
+                <div className="text-2xl font-black text-white">{percentage}%</div>
+                <div className="text-xs font-bold text-white">📊</div>
               </div>
             </div>
-          );
-        }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(React.createElement(MultiplicationGame));
-    </script>
+            <div className="flex items-center justify-center gap-2 mb-6 bg-gradient-to-r from-yellow-100 to-orange-100 p-3 rounded-2xl border-2 border-yellow-400 shadow-inner">
+              <span className="text-2xl">⭐</span>
+              <span className="text-lg font-black text-orange-700">
+                Серия: {streak} 🔥
+              </span>
+              {bestStreak > 0 && (
+                <span className="text-sm font-bold text-orange-600 ml-2">
+                  (макс: {bestStreak})
+                </span>
+              )}
+            </div>
+
+            <div className="bg-gradient-to-br from-purple-100 via-pink-100 to-blue-100 rounded-3xl p-6 mb-6 border-3 border-purple-300 shadow-xl">
+              <div className="flex justify-center gap-3 mb-4">
+                {[...Array(2)].map((_, i) => (
+                  <span key={i} className="text-4xl">
+                    {lives > i ? '❤️' : '🤍'}
+                  </span>
+                ))}
+              </div>
+              
+              <div className="text-center mb-6 bg-white p-4 rounded-2xl border-3 border-purple-300 shadow-inner">
+                <div className="flex items-center justify-center gap-3 flex-wrap">
+                  <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
+                    {num1}
+                  </span>
+                  <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
+                    {currentOperation}
+                  </span>
+                  <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
+                    {num2}
+                  </span>
+                  <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
+                    =
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={answer}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      setAnswer(value);
+                    }}
+                    onKeyPress={handleKeyPress}
+                    className="w-24 text-5xl text-center border-4 border-purple-400 rounded-xl p-2 focus:outline-none focus:border-pink-500 font-black text-purple-700 bg-yellow-50 shadow-lg"
+                    placeholder="?"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={checkAnswer}
+                disabled={answer === ''}
+                className="w-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 text-white text-xl font-black py-4 rounded-2xl hover:from-purple-600 hover:via-pink-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 shadow-lg"
+              >
+                ПРОВЕРИТЬ ✨
+              </button>
+            </div>
+
+            {message && (
+              <div className={`text-center text-xl font-black mb-4 p-4 rounded-2xl border-3 shadow-lg ${
+                message.includes('Правильно') 
+                  ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border-green-400' 
+                  : message.includes('Подумай')
+                  ? 'bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-700 border-yellow-400'
+                  : 'bg-gradient-to-r from-red-100 to-rose-100 text-red-700 border-red-400'
+              }`}>
+                {message}
+              </div>
+            )}
+
+            {score >= 5 && currentRound < totalRounds && (
+              <div className="mt-6 text-center bg-gradient-to-r from-yellow-100 to-orange-100 p-4 rounded-2xl border-2 border-yellow-400 shadow-lg">
+                <div className="text-4xl mb-2">🏆</div>
+                <div className="text-yellow-800 font-black text-lg">
+                  ⭐ Супер! Ты отлично справляешься! ⭐
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(MultiplicationGame));
+</script>
 </body>
 </html>
