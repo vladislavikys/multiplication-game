@@ -97,14 +97,17 @@
                 const data = doc.data();
                 setGamesLeft(data.gamesLeft || 0);
               } else {
+                // Создаем новый профиль пользователя с пустой историей активаций
                 await db.collection('users').doc(userId).set({
                   gamesLeft: 0,
+                  activatedCodes: [],  // История активированных кодов
                   createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
                 setGamesLeft(0);
               }
             } catch (error) {
               console.error('Error loading user data:', error);
+              alert('❌ Ошибка загрузки данных пользователя');
             }
           };
 
@@ -161,38 +164,85 @@
             }
 
             const code = activationCode.toUpperCase().trim();
-            
+
+            if (!code) {
+              alert('❌ Введите код активации');
+              return;
+            }
+
             try {
+              // 1. Получаем данные пользователя
+              const userDoc = await db.collection('users').doc(user.uid).get();
+              const userData = userDoc.data();
+
+              // 2. Проверяем, не активировал ли пользователь уже этот код
+              if (userData.activatedCodes && userData.activatedCodes.includes(code)) {
+                alert('❌ Вы уже активировали этот код ранее!');
+                return;
+              }
+
+              // 3. Получаем данные кода
               const codeDoc = await db.collection('codes').doc(code).get();
-              
+
               if (!codeDoc.exists) {
-                alert('❌ Код не найден!');
+                alert('❌ Код не найден! Проверьте правильность ввода.');
                 return;
               }
 
               const codeData = codeDoc.data();
 
+              // 4. Проверяем, не использован ли код другим пользователем
               if (codeData.used) {
-                alert(`❌ Этот код уже был использован ${codeData.usedBy === user.uid ? 'вами' : 'другим пользователем'}!`);
+                if (codeData.usedBy === user.uid) {
+                  alert('❌ Вы уже активировали этот код!');
+                } else {
+                  alert('❌ Этот код уже был использован другим пользователем!');
+                }
                 return;
               }
 
-              await db.collection('codes').doc(code).update({
-                used: true,
-                usedBy: user.uid,
-                usedAt: firebase.firestore.FieldValue.serverTimestamp()
+              // 5. ТРАНЗАКЦИЯ: Обновляем код и пользователя одновременно
+              await db.runTransaction(async (transaction) => {
+                // Помечаем код как использованный
+                transaction.update(db.collection('codes').doc(code), {
+                  used: true,
+                  usedBy: user.uid,
+                  usedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                // Обновляем данные пользователя
+                const newGamesLeft = gamesLeft + codeData.games;
+                const activatedCodes = userData.activatedCodes || [];
+                activatedCodes.push(code);
+
+                transaction.update(db.collection('users').doc(user.uid), {
+                  gamesLeft: newGamesLeft,
+                  activatedCodes: activatedCodes,
+                  lastActivation: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                return newGamesLeft;
               });
 
+              // 6. Обновляем состояние
               const newGamesLeft = gamesLeft + codeData.games;
-              await updateGamesLeft(newGamesLeft);
-
+              setGamesLeft(newGamesLeft);
               setActivationCode('');
               setShowActivation(false);
-              alert(`✅ Код активирован! Добавлено ${codeData.games} игр. Всего игр: ${newGamesLeft}`);
-              
+
+              alert(`✅ Код успешно активирован!\n\n🎮 Добавлено игр: ${codeData.games}\n📊 Всего игр: ${newGamesLeft}\n🔑 Код: ${code}\n\n✨ Доступ активирован навсегда!`);
+
             } catch (error) {
               console.error('Error activating code:', error);
-              alert('❌ Ошибка активации кода. Попробуйте снова.');
+
+              // Понятные сообщения об ошибках
+              if (error.code === 'permission-denied') {
+                alert('❌ Ошибка доступа. Проверьте подключение к интернету.');
+              } else if (error.code === 'unavailable') {
+                alert('❌ Сервер недоступен. Попробуйте позже.');
+              } else {
+                alert('❌ Ошибка активации кода. Попробуйте снова.\n\n' + error.message);
+              }
             }
           };
 

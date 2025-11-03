@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ========================================
+    // ПРАВИЛА ДЛЯ ПОЛЬЗОВАТЕЛЕЙ
+    // ========================================
+    match /users/{userId} {
+      // Пользователь может читать только свои данные
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      // Пользователь может создать свой документ при регистрации
+      allow create: if request.auth != null && request.auth.uid == userId;
+
+      // Пользователь может обновлять только свои данные
+      allow update: if request.auth != null && request.auth.uid == userId
+        // Нельзя изменять activatedCodes напрямую (только через активацию кода)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['activatedCodes']));
+    }
+
+    // ========================================
+    // ПРАВИЛА ДЛЯ КОДОВ АКТИВАЦИИ
+    // ========================================
+    match /codes/{codeId} {
+      // Все пользователи могут читать коды (для проверки при активации)
+      allow read: if request.auth != null;
+
+      // ТОЛЬКО АДМИНЫ могут создавать коды
+      // Добавьте email админа в Firebase Authentication
+      allow create: if request.auth != null
+        && request.auth.token.email in [
+          'your-admin-email@example.com'  // ЗАМЕНИТЕ НА ВАШ EMAIL АДМИНА!
+        ];
+
+      // Обновление кода разрешено только для активации (пометка used=true)
+      allow update: if request.auth != null
+        && !resource.data.used  // Код еще не использован
+        && request.resource.data.used == true  // Помечаем как использованный
+        && request.resource.data.usedBy == request.auth.uid  // Привязываем к текущему пользователю
+        && request.resource.data.keys().hasAll(['used', 'usedBy', 'usedAt', 'games', 'createdAt']);
+
+      // Удаление запрещено
+      allow delete: if false;
+    }
+  }
+}
