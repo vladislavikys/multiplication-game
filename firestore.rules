@@ -7,7 +7,12 @@ service cloud.firestore {
     // ========================================
     match /users/{userId} {
       // Пользователь может читать только свои данные
-      allow read: if request.auth != null && request.auth.uid == userId;
+      // Админы могут читать всех
+      allow read: if request.auth != null &&
+        (request.auth.uid == userId ||
+         request.auth.token.email in [
+           'your-admin-email@example.com'  // ЗАМЕНИТЕ НА ВАШ EMAIL АДМИНА!
+         ]);
 
       // Пользователь может создать свой документ при регистрации
       allow create: if request.auth != null && request.auth.uid == userId;
@@ -16,6 +21,20 @@ service cloud.firestore {
       allow update: if request.auth != null && request.auth.uid == userId
         // Нельзя изменять activatedCodes напрямую (только через активацию кода)
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['activatedCodes']));
+    }
+
+    // ========================================
+    // ПРАВИЛА ДЛЯ СЕССИЙ (Мониторинг активности)
+    // ========================================
+    match /sessions/{sessionId} {
+      // Пользователь может читать и обновлять только свою сессию
+      allow read, write: if request.auth != null && request.auth.uid == sessionId;
+
+      // Админы могут читать все сессии для мониторинга
+      allow read: if request.auth != null &&
+        request.auth.token.email in [
+          'your-admin-email@example.com'  // ЗАМЕНИТЕ НА ВАШ EMAIL АДМИНА!
+        ];
     }
 
     // ========================================
