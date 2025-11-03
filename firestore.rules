@@ -56,7 +56,7 @@ service cloud.firestore {
         && !resource.data.used  // Код еще не использован
         && request.resource.data.used == true  // Помечаем как использованный
         && request.resource.data.usedBy == request.auth.uid  // Привязываем к текущему пользователю
-        && request.resource.data.keys().hasAll(['used', 'usedBy', 'usedByEmail', 'usedAt', 'createdAt']);
+        && request.resource.data.usedByEmail == request.auth.token.email; // Email совпадает
 
       // Удаление запрещено
       allow delete: if false;
