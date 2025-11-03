@@ -3,86 +3,128 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ========================================
+    // HELPER FUNCTIONS (Вспомогательные функции)
+    // ========================================
+
+    // Проверка, что пользователь аутентифицирован
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Проверка, что пользователь является владельцем ресурса
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Проверка, что пользователь является админом
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email in [
+        'zarya.vlad@yandex.ru'
+      ];
+    }
+
+    // Проверка валидности email
+    function hasValidEmail() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // ========================================
     // ПРАВИЛА ДЛЯ ПОЛЬЗОВАТЕЛЕЙ
     // ========================================
     match /users/{userId} {
-      // Пользователь может читать только свои данные
-      // Админы могут читать всех
-      allow read: if request.auth != null &&
-        (request.auth.uid == userId ||
-         request.auth.token.email in [
-           'zarya.vlad@yandex.ru'
-         ]);
+      // Чтение: владелец или админ
+      allow read: if isOwner(userId) || isAdmin();
 
-      // Пользователь может создать свой документ при регистрации
-      allow create: if request.auth != null && request.auth.uid == userId;
+      // Создание: только свой документ при регистрации
+      allow create: if isOwner(userId)
+        && request.resource.data.keys().hasAll(['email', 'hasLicense', 'blocked', 'activatedCodes', 'createdAt'])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.hasLicense is bool
+        && request.resource.data.blocked is bool
+        && request.resource.data.activatedCodes is list;
 
-      // Пользователь может обновлять только свои данные
-      allow update: if request.auth != null && request.auth.uid == userId
-        // Нельзя изменять activatedCodes и blocked напрямую
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['activatedCodes', 'blocked']));
+      // Обновление: владелец может обновлять свои данные (кроме защищенных полей)
+      allow update: if isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['activatedCodes', 'blocked', 'email']);
 
-      // Админы могут блокировать/разблокировать пользователей
-      allow update: if request.auth != null &&
-        request.auth.token.email in [
-          'zarya.vlad@yandex.ru'
-        ];
+      // Обновление: админ может обновлять любые данные (блокировка, лицензия)
+      allow update: if isAdmin();
+
+      // Удаление запрещено для всех
+      allow delete: if false;
     }
 
     // ========================================
     // ПРАВИЛА ДЛЯ СЕССИЙ (Мониторинг активности)
     // ========================================
     match /sessions/{sessionId} {
-      // Пользователь может читать и обновлять только свою сессию
-      allow read, write: if request.auth != null && request.auth.uid == sessionId;
+      // Владелец может читать и писать свою сессию
+      allow read, write: if isOwner(sessionId)
+        && request.resource.data.userId == sessionId;
 
-      // Админы могут читать все сессии для мониторинга
-      allow read: if request.auth != null &&
-        request.auth.token.email in [
-          'zarya.vlad@yandex.ru'
-        ];
+      // Админ может читать все сессии для мониторинга
+      allow read: if isAdmin();
+
+      // Админ может обновлять сессии (деактивация при блокировке)
+      allow update: if isAdmin();
+
+      // Удаление разрешено владельцу и админу
+      allow delete: if isOwner(sessionId) || isAdmin();
     }
 
     // ========================================
     // ПРАВИЛА ДЛЯ КОДОВ АКТИВАЦИИ
     // ========================================
     match /codes/{codeId} {
-      // Все пользователи могут читать коды (для проверки при активации)
-      allow read: if request.auth != null;
+      // Чтение: все аутентифицированные пользователи (для проверки при активации)
+      allow read: if isSignedIn();
 
-      // ТОЛЬКО АДМИНЫ могут создавать коды
-      // Добавьте email админа в Firebase Authentication
-      allow create: if request.auth != null
-        && request.auth.token.email in [
-          'zarya.vlad@yandex.ru'
-        ];
+      // Создание: только админы
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll(['code', 'used', 'createdAt', 'createdBy'])
+        && request.resource.data.code is string
+        && request.resource.data.used == false
+        && request.resource.data.createdBy == request.auth.uid;
 
-      // Обновление кода разрешено только для активации (пометка used=true)
-      allow update: if request.auth != null
-        && !resource.data.used  // Код еще не использован
+      // Обновление: пользователи могут активировать неиспользованные коды
+      allow update: if isSignedIn()
+        && resource.data.used == false  // Код еще не использован
         && request.resource.data.used == true  // Помечаем как использованный
         && request.resource.data.usedBy == request.auth.uid  // Привязываем к текущему пользователю
-        && request.resource.data.usedByEmail == request.auth.token.email; // Email совпадает
+        && request.resource.data.usedByEmail == request.auth.token.email  // Email совпадает
+        && request.resource.data.keys().hasAll(['usedAt', 'usedBy', 'usedByEmail']);  // Обязательные поля при активации
 
-      // Удаление запрещено
-      allow delete: if false;
+      // Админ может обновлять коды (деактивация, исправление)
+      allow update: if isAdmin();
+
+      // Удаление: только админ
+      allow delete: if isAdmin();
     }
 
     // ========================================
     // ЛОГИ БЕЗОПАСНОСТИ
     // ========================================
     match /security_logs/{logId} {
-      // Пользователи могут записывать логи (создавать)
-      allow create: if request.auth != null;
+      // Создание: все аутентифицированные пользователи могут создавать логи
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasAll(['userId', 'eventType', 'timestamp'])
+        && request.resource.data.userId is string
+        && request.resource.data.eventType is string
+        && request.resource.data.eventType in ['concurrent_login_attempt', 'device_switch', 'device_limit_exceeded', 'user_blocked', 'user_unblocked'];
 
-      // Только админы могут читать логи
-      allow read: if request.auth != null &&
-        request.auth.token.email in [
-          'zarya.vlad@yandex.ru'
-        ];
+      // Чтение: только админы
+      allow read: if isAdmin();
 
-      // Никто не может обновлять или удалять логи
+      // Обновление и удаление запрещены (логи неизменяемы)
       allow update, delete: if false;
+    }
+
+    // ========================================
+    // ПРАВИЛО ПО УМОЛЧАНИЮ
+    // ========================================
+    // Все остальные коллекции запрещены
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
