@@ -110,6 +110,14 @@
             const deviceInfo = await getDeviceInfo();
 
             try {
+              // Проверяем блокировку перед обновлением сессии
+              const userDoc = await db.collection('users').doc(userId).get();
+              if (userDoc.exists && userDoc.data().blocked) {
+                alert('🚫 ВАШ АККАУНТ ЗАБЛОКИРОВАН\n\nОбратитесь в службу поддержки для получения информации.');
+                await auth.signOut();
+                return;
+              }
+
               await db.collection('sessions').doc(userId).set({
                 ...deviceInfo,
                 userId,
@@ -257,11 +265,21 @@
               const doc = await db.collection('users').doc(userId).get();
               if (doc.exists) {
                 const data = doc.data();
+
+                // Проверка блокировки аккаунта
+                if (data.blocked) {
+                  alert('🚫 ВАШ АККАУНТ ЗАБЛОКИРОВАН\n\nОбратитесь в службу поддержки для получения информации.');
+                  await auth.signOut();
+                  setGameState('auth');
+                  return;
+                }
+
                 setHasLicense(data.hasLicense || false);
               } else {
                 // Создаем новый профиль пользователя
                 await db.collection('users').doc(userId).set({
                   hasLicense: false,
+                  blocked: false,  // По умолчанию не заблокирован
                   email: user.email,  // Сохраняем email для админки
                   activatedCodes: [],  // История активированных кодов
                   createdAt: firebase.firestore.FieldValue.serverTimestamp()
