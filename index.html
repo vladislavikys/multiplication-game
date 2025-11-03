@@ -43,7 +43,7 @@
           const [password, setPassword] = useState('');
           const [gameState, setGameState] = useState('auth');
           const [activationCode, setActivationCode] = useState('');
-          const [gamesLeft, setGamesLeft] = useState(0);
+          const [hasLicense, setHasLicense] = useState(false);
           const [showActivation, setShowActivation] = useState(false);
           const [totalRounds, setTotalRounds] = useState(10);
           const [operations, setOperations] = useState({
@@ -95,31 +95,19 @@
               const doc = await db.collection('users').doc(userId).get();
               if (doc.exists) {
                 const data = doc.data();
-                setGamesLeft(data.gamesLeft || 0);
+                setHasLicense(data.hasLicense || false);
               } else {
-                // Создаем новый профиль пользователя с пустой историей активаций
+                // Создаем новый профиль пользователя
                 await db.collection('users').doc(userId).set({
-                  gamesLeft: 0,
+                  hasLicense: false,
                   activatedCodes: [],  // История активированных кодов
                   createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                setGamesLeft(0);
+                setHasLicense(false);
               }
             } catch (error) {
               console.error('Error loading user data:', error);
               alert('❌ Ошибка загрузки данных пользователя');
-            }
-          };
-
-          const updateGamesLeft = async (newGamesLeft) => {
-            if (!user) return;
-            try {
-              await db.collection('users').doc(user.uid).update({
-                gamesLeft: newGamesLeft
-              });
-              setGamesLeft(newGamesLeft);
-            } catch (error) {
-              console.error('Error updating games:', error);
             }
           };
 
@@ -207,30 +195,27 @@
                 transaction.update(db.collection('codes').doc(code), {
                   used: true,
                   usedBy: user.uid,
+                  usedByEmail: user.email,
                   usedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
-                // Обновляем данные пользователя
-                const newGamesLeft = gamesLeft + codeData.games;
+                // Обновляем данные пользователя - даем бессрочную лицензию
                 const activatedCodes = userData.activatedCodes || [];
                 activatedCodes.push(code);
 
                 transaction.update(db.collection('users').doc(user.uid), {
-                  gamesLeft: newGamesLeft,
+                  hasLicense: true,
                   activatedCodes: activatedCodes,
                   lastActivation: firebase.firestore.FieldValue.serverTimestamp()
                 });
-
-                return newGamesLeft;
               });
 
               // 6. Обновляем состояние
-              const newGamesLeft = gamesLeft + codeData.games;
-              setGamesLeft(newGamesLeft);
+              setHasLicense(true);
               setActivationCode('');
               setShowActivation(false);
 
-              alert(`✅ Код успешно активирован!\n\n🎮 Добавлено игр: ${codeData.games}\n📊 Всего игр: ${newGamesLeft}\n🔑 Код: ${code}\n\n✨ Доступ активирован навсегда!`);
+              alert(`✅ Код успешно активирован!\n\n🎉 Бессрочная лицензия активирована!\n🔑 Код: ${code}\n\n✨ Теперь у вас неограниченный доступ к игре навсегда!`);
 
             } catch (error) {
               console.error('Error activating code:', error);
@@ -294,15 +279,12 @@
           };
 
           const startGame = async () => {
-            if (gamesLeft <= 0) {
-              alert('❌ У вас закончились игры! Введите код активации.');
+            if (!hasLicense) {
+              alert('❌ У вас нет доступа к игре!\n\n🔑 Введите код активации для получения бессрочной лицензии.');
               setShowActivation(true);
               return;
             }
-            
-            const newGamesLeft = gamesLeft - 1;
-            await updateGamesLeft(newGamesLeft);
-            
+
             setGameState('playing');
             setScore(0);
             setCurrentRound(0);
@@ -526,8 +508,8 @@
                   <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"></div>
                   
                   <div className="flex justify-between items-center mb-6">
-                    <div className="bg-green-500 text-white px-4 py-2 rounded-full font-bold shadow-lg">
-                      🎮 Игр: {gamesLeft}
+                    <div className={`text-white px-4 py-2 rounded-full font-bold shadow-lg ${hasLicense ? 'bg-green-500' : 'bg-gray-500'}`}>
+                      {hasLicense ? '✅ Лицензия активна' : '🔒 Нет доступа'}
                     </div>
                     <button
                       onClick={handleLogout}
@@ -539,7 +521,7 @@
 
                   {showActivation && (
                     <div className="mb-6 bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4">
-                      <p className="font-bold text-yellow-800 mb-2">🔑 Добавить игры:</p>
+                      <p className="font-bold text-yellow-800 mb-2">🔑 Активировать лицензию:</p>
                       <input
                         type="text"
                         value={activationCode}
@@ -655,12 +637,14 @@
                     ▶ ПОЕХАЛИ!
                   </button>
 
-                  <button
-                    onClick={() => setShowActivation(!showActivation)}
-                    className="w-full bg-gray-200 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-300"
-                  >
-                    🔑 Добавить игры
-                  </button>
+                  {!hasLicense && (
+                    <button
+                      onClick={() => setShowActivation(!showActivation)}
+                      className="w-full bg-yellow-500 text-white font-bold py-3 rounded-xl hover:bg-yellow-600"
+                    >
+                      🔑 Активировать лицензию
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -675,7 +659,7 @@
                   <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"></div>
                   
                   <div className="absolute top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-full font-bold shadow-lg">
-                    🎮 Осталось: {gamesLeft}
+                    ✅ Лицензия активна
                   </div>
                   
                   <div className="text-center mb-6">
