@@ -68,6 +68,152 @@
           
           const audioContextRef = useRef(null);
 
+          // Генерация Device ID (fingerprint устройства)
+          const getDeviceId = () => {
+            let deviceId = localStorage.getItem('deviceId');
+            if (!deviceId) {
+              deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+              localStorage.setItem('deviceId', deviceId);
+            }
+            return deviceId;
+          };
+
+          // Получение IP адреса (приблизительно)
+          const getDeviceInfo = async () => {
+            const deviceId = getDeviceId();
+            const userAgent = navigator.userAgent;
+            const platform = navigator.platform;
+            const language = navigator.language;
+
+            // Попытка получить IP (будет работать через внешний сервис)
+            let ipAddress = 'unknown';
+            try {
+              const response = await fetch('https://api.ipify.org?format=json');
+              const data = await response.json();
+              ipAddress = data.ip;
+            } catch (e) {
+              console.log('Could not get IP');
+            }
+
+            return {
+              deviceId,
+              userAgent,
+              platform,
+              language,
+              ipAddress,
+              lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+            };
+          };
+
+          // Обновление активной сессии
+          const updateSession = async (userId) => {
+            const deviceInfo = await getDeviceInfo();
+
+            try {
+              await db.collection('sessions').doc(userId).set({
+                ...deviceInfo,
+                userId,
+                isActive: true
+              });
+            } catch (error) {
+              console.error('Error updating session:', error);
+            }
+          };
+
+          // Логирование подозрительной активности
+          const logSecurityEvent = async (userId, eventType, details) => {
+            try {
+              await db.collection('security_logs').add({
+                userId,
+                eventType,
+                details,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                deviceId: getDeviceId(),
+                ...await getDeviceInfo()
+              });
+            } catch (error) {
+              console.error('Error logging security event:', error);
+            }
+          };
+
+          // Проверка частоты смены устройств
+          const checkDeviceSwitchLimit = async (userId) => {
+            try {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+
+              const logsSnapshot = await db.collection('security_logs')
+                .where('userId', '==', userId)
+                .where('eventType', '==', 'device_switch')
+                .where('timestamp', '>=', today)
+                .get();
+
+              const switchCount = logsSnapshot.size;
+
+              // Максимум 3 смены устройств в день
+              if (switchCount >= 3) {
+                alert('⚠️ ПОДОЗРИТЕЛЬНАЯ АКТИВНОСТЬ!\n\nВы превысили лимит смены устройств (3 раза в день).\n\nЭто выглядит как попытка расшарить аккаунт.\n\nДоступ временно ограничен.\n\nСвяжитесь с поддержкой.');
+                await logSecurityEvent(userId, 'device_limit_exceeded', {
+                  switchCount,
+                  blocked: true
+                });
+                return false;
+              }
+
+              return true;
+            } catch (error) {
+              console.error('Error checking device switch limit:', error);
+              return true;
+            }
+          };
+
+          // Проверка множественных входов
+          const checkMultipleDevices = async (userId) => {
+            const deviceId = getDeviceId();
+
+            try {
+              const sessionDoc = await db.collection('sessions').doc(userId).get();
+
+              if (sessionDoc.exists) {
+                const sessionData = sessionDoc.data();
+
+                // Если это другое устройство
+                if (sessionData.deviceId !== deviceId && sessionData.isActive) {
+                  // Логируем попытку множественного входа
+                  await logSecurityEvent(userId, 'concurrent_login_attempt', {
+                    currentDevice: deviceId,
+                    activeDevice: sessionData.deviceId,
+                    currentIP: (await getDeviceInfo()).ipAddress,
+                    activeIP: sessionData.ipAddress
+                  });
+
+                  // Проверяем лимит смены устройств
+                  const canSwitch = await checkDeviceSwitchLimit(userId);
+                  if (!canSwitch) {
+                    await auth.signOut();
+                    return false;
+                  }
+
+                  // Логируем смену устройства
+                  await logSecurityEvent(userId, 'device_switch', {
+                    oldDevice: sessionData.deviceId,
+                    newDevice: deviceId
+                  });
+
+                  // Выгоняем пользователя
+                  alert('⚠️ ВНИМАНИЕ!\n\nВаш аккаунт уже используется на другом устройстве.\n\nОдин аккаунт = одно устройство!\n\nЕсли это не вы, срочно смените пароль.');
+                  await auth.signOut();
+                  return false;
+                }
+              }
+
+              return true;
+            } catch (error) {
+              console.error('Error checking devices:', error);
+              return true;
+            }
+          };
+
           useEffect(() => {
             try {
               audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -77,9 +223,25 @@
 
             const unsubscribe = auth.onAuthStateChanged(async (user) => {
               if (user) {
-                setUser(user);
-                await loadUserData(user.uid);
-                setGameState('setup');
+                // Проверяем множественные устройства
+                const canContinue = await checkMultipleDevices(user.uid);
+
+                if (canContinue) {
+                  setUser(user);
+                  await loadUserData(user.uid);
+                  await updateSession(user.uid);
+                  setGameState('setup');
+
+                  // Обновляем сессию каждые 30 секунд
+                  const sessionInterval = setInterval(() => {
+                    if (auth.currentUser) {
+                      updateSession(auth.currentUser.uid);
+                    }
+                  }, 30000);
+
+                  // Очищаем интервал при выходе
+                  return () => clearInterval(sessionInterval);
+                }
               } else {
                 setUser(null);
                 setGameState('auth');
@@ -100,6 +262,7 @@
                 // Создаем новый профиль пользователя
                 await db.collection('users').doc(userId).set({
                   hasLicense: false,
+                  email: user.email,  // Сохраняем email для админки
                   activatedCodes: [],  // История активированных кодов
                   createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
@@ -130,6 +293,14 @@
 
           const handleLogout = async () => {
             try {
+              // Деактивируем сессию
+              if (user) {
+                await db.collection('sessions').doc(user.uid).update({
+                  isActive: false,
+                  logoutAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+              }
+
               await auth.signOut();
               setGameState('auth');
             } catch (error) {

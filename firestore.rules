@@ -7,7 +7,12 @@ service cloud.firestore {
     // ========================================
     match /users/{userId} {
       // Пользователь может читать только свои данные
-      allow read: if request.auth != null && request.auth.uid == userId;
+      // Админы могут читать всех
+      allow read: if request.auth != null &&
+        (request.auth.uid == userId ||
+         request.auth.token.email in [
+           'zarya.vlad@yandex.ru'
+         ]);
 
       // Пользователь может создать свой документ при регистрации
       allow create: if request.auth != null && request.auth.uid == userId;
@@ -16,6 +21,20 @@ service cloud.firestore {
       allow update: if request.auth != null && request.auth.uid == userId
         // Нельзя изменять activatedCodes напрямую (только через активацию кода)
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['activatedCodes']));
+    }
+
+    // ========================================
+    // ПРАВИЛА ДЛЯ СЕССИЙ (Мониторинг активности)
+    // ========================================
+    match /sessions/{sessionId} {
+      // Пользователь может читать и обновлять только свою сессию
+      allow read, write: if request.auth != null && request.auth.uid == sessionId;
+
+      // Админы могут читать все сессии для мониторинга
+      allow read: if request.auth != null &&
+        request.auth.token.email in [
+          'zarya.vlad@yandex.ru'
+        ];
     }
 
     // ========================================
@@ -29,7 +48,7 @@ service cloud.firestore {
       // Добавьте email админа в Firebase Authentication
       allow create: if request.auth != null
         && request.auth.token.email in [
-          'your-admin-email@example.com'  // ЗАМЕНИТЕ НА ВАШ EMAIL АДМИНА!
+          'zarya.vlad@yandex.ru'
         ];
 
       // Обновление кода разрешено только для активации (пометка used=true)
@@ -41,6 +60,23 @@ service cloud.firestore {
 
       // Удаление запрещено
       allow delete: if false;
+    }
+
+    // ========================================
+    // ЛОГИ БЕЗОПАСНОСТИ
+    // ========================================
+    match /security_logs/{logId} {
+      // Пользователи могут записывать логи (создавать)
+      allow create: if request.auth != null;
+
+      // Только админы могут читать логи
+      allow read: if request.auth != null &&
+        request.auth.token.email in [
+          'zarya.vlad@yandex.ru'
+        ];
+
+      // Никто не может обновлять или удалять логи
+      allow update, delete: if false;
     }
   }
 }
