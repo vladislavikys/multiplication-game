@@ -20,12 +20,25 @@ service cloud.firestore {
     }
 
     // ========================================
-    // USERS - УПРОЩЕННЫЕ ПРАВИЛА
+    // USERS - С ЗАЩИТОЙ КРИТИЧЕСКИХ ПОЛЕЙ
     // ========================================
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isAdmin();
+
+      // Пользователь НЕ МОЖЕТ изменять hasLicense, activatedCodes, blocked напрямую
+      allow update: if isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['hasLicense', 'activatedCodes', 'blocked']);
+
+      // ИСКЛЮЧЕНИЕ: Разрешить активацию кода (hasLicense false→true и добавление кода в массив)
+      allow update: if isOwner(userId)
+        && resource.data.hasLicense == false
+        && request.resource.data.hasLicense == true
+        && request.resource.data.activatedCodes.size() == resource.data.activatedCodes.size() + 1;
+
+      // Админ может изменять ВСЁ
+      allow update: if isAdmin();
+
       allow delete: if false;
     }
 

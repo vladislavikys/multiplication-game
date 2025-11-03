@@ -245,7 +245,7 @@
                     alert('⏱️ Превышено время ожидания загрузки данных.\nПопробуйте обновить страницу.');
                   }, 10000); // 10 секунд таймаут
 
-                  await loadUserData(user.uid);
+                  await loadUserData(user);  // Передаем весь user объект, не только uid
                   await updateSession(user.uid);
 
                   clearTimeout(loadTimeout);
@@ -276,11 +276,18 @@
             return () => unsubscribe();
           }, []);
 
-          const loadUserData = async (userId) => {
+          const loadUserData = async (userObj) => {
             try {
+              const userId = userObj.uid;
+              const userEmail = userObj.email;
+
+              console.log('🔍 Loading user data for:', userId, userEmail);
+
               const doc = await db.collection('users').doc(userId).get();
               if (doc.exists) {
                 const data = doc.data();
+
+                console.log('📄 Existing user document:', { hasLicense: data.hasLicense, email: data.email });
 
                 // Проверка блокировки аккаунта
                 if (data.blocked) {
@@ -290,20 +297,26 @@
                   return;
                 }
 
-                setHasLicense(data.hasLicense || false);
+                const licenseStatus = data.hasLicense || false;
+                console.log('✅ Setting hasLicense to:', licenseStatus);
+                setHasLicense(licenseStatus);
               } else {
                 // Создаем новый профиль пользователя
+                console.log('📝 Creating new user document with hasLicense: false');
+
                 await db.collection('users').doc(userId).set({
                   hasLicense: false,
                   blocked: false,  // По умолчанию не заблокирован
-                  email: user.email,  // Сохраняем email для админки
+                  email: userEmail,  // Используем email из параметра, не из глобального state
                   activatedCodes: [],  // История активированных кодов
                   createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
+
+                console.log('✅ New user created, setting hasLicense to: false');
                 setHasLicense(false);
               }
             } catch (error) {
-              console.error('Error loading user data:', error);
+              console.error('❌ Error loading user data:', error);
               alert('❌ Ошибка загрузки данных пользователя');
             }
           };
