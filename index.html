@@ -175,8 +175,8 @@
             }
           };
 
-          // Проверка множественных входов
-          const checkMultipleDevices = async (userId) => {
+          // Проверка множественных входов (вызывается ТОЛЬКО при активном входе)
+          const checkAndSwitchDevice = async (userId) => {
             const deviceId = getDeviceId();
 
             try {
@@ -185,7 +185,7 @@
               if (sessionDoc.exists) {
                 const sessionData = sessionDoc.data();
 
-                // Если это другое устройство
+                // Если это другое устройство и оно активно
                 if (sessionData.deviceId !== deviceId && sessionData.isActive) {
                   // Логируем попытку множественного входа
                   await logSecurityEvent(userId, 'concurrent_login_attempt', {
@@ -199,7 +199,7 @@
                   const canSwitch = await checkDeviceSwitchLimit(userId);
                   if (!canSwitch) {
                     await auth.signOut();
-                    return false;
+                    throw new Error('Превышен лимит смены устройств');
                   }
 
                   // Логируем смену устройства
@@ -208,17 +208,21 @@
                     newDevice: deviceId
                   });
 
-                  // Выгоняем пользователя
-                  alert('⚠️ ВНИМАНИЕ!\n\nВаш аккаунт уже используется на другом устройстве.\n\nОдин аккаунт = одно устройство!\n\nЕсли это не вы, срочно смените пароль.');
-                  await auth.signOut();
-                  return false;
+                  // Деактивируем старую сессию (автовыход с первого устройства)
+                  await db.collection('sessions').doc(userId).update({
+                    isActive: false,
+                    replacedBy: deviceId,
+                    replacedAt: firebase.firestore.FieldValue.serverTimestamp()
+                  });
+
+                  console.log('Старая сессия деактивирована, вход на новом устройстве разрешен');
                 }
               }
 
               return true;
             } catch (error) {
               console.error('Error checking devices:', error);
-              return true;
+              throw error;
             }
           };
 
@@ -230,14 +234,22 @@
             }
 
             const unsubscribe = auth.onAuthStateChanged(async (user) => {
-              if (user) {
-                // Проверяем множественные устройства
-                const canContinue = await checkMultipleDevices(user.uid);
-
-                if (canContinue) {
+              try {
+                if (user) {
                   setUser(user);
+
+                  // Загружаем данные пользователя с таймаутом
+                  const loadTimeout = setTimeout(() => {
+                    console.error('Timeout loading user data');
+                    setLoading(false);
+                    alert('⏱️ Превышено время ожидания загрузки данных.\nПопробуйте обновить страницу.');
+                  }, 10000); // 10 секунд таймаут
+
                   await loadUserData(user.uid);
                   await updateSession(user.uid);
+
+                  clearTimeout(loadTimeout);
+
                   setGameState('setup');
 
                   // Обновляем сессию каждые 30 секунд
@@ -249,12 +261,16 @@
 
                   // Очищаем интервал при выходе
                   return () => clearInterval(sessionInterval);
+                } else {
+                  setUser(null);
+                  setGameState('auth');
                 }
-              } else {
-                setUser(null);
-                setGameState('auth');
+              } catch (error) {
+                console.error('Error in auth state changed:', error);
+                alert('❌ Ошибка загрузки: ' + error.message);
+              } finally {
+                setLoading(false);
               }
-              setLoading(false);
             });
 
             return () => unsubscribe();
@@ -303,7 +319,20 @@
 
           const handleLogin = async () => {
             try {
-              await auth.signInWithEmailAndPassword(email, password);
+              // Входим в аккаунт
+              const userCredential = await auth.signInWithEmailAndPassword(email, password);
+              const userId = userCredential.user.uid;
+
+              // Проверяем и переключаем устройство если нужно
+              try {
+                await checkAndSwitchDevice(userId);
+              } catch (deviceError) {
+                // Если не прошла проверка устройств - выходим
+                console.error('Device check failed:', deviceError);
+                return;
+              }
+
+              // Успешный вход - Firebase обработает через onAuthStateChanged
             } catch (error) {
               alert('❌ Ошибка входа: ' + error.message);
             }
