@@ -3,126 +3,63 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ========================================
-    // HELPER FUNCTIONS (Вспомогательные функции)
+    // HELPER FUNCTIONS
     // ========================================
-
-    // Проверка, что пользователь аутентифицирован
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Проверка, что пользователь является владельцем ресурса
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Проверка, что пользователь является админом
     function isAdmin() {
       return isSignedIn() && request.auth.token.email in [
         'zarya.vlad@yandex.ru'
       ];
     }
 
-    // Проверка валидности email
-    function hasValidEmail() {
-      return isSignedIn() && request.auth.token.email_verified == true;
-    }
-
     // ========================================
-    // ПРАВИЛА ДЛЯ ПОЛЬЗОВАТЕЛЕЙ
+    // USERS - УПРОЩЕННЫЕ ПРАВИЛА
     // ========================================
     match /users/{userId} {
-      // Чтение: владелец или админ
       allow read: if isOwner(userId) || isAdmin();
-
-      // Создание: только свой документ при регистрации
-      allow create: if isOwner(userId)
-        && request.resource.data.keys().hasAll(['email', 'hasLicense', 'blocked', 'activatedCodes', 'createdAt'])
-        && request.resource.data.email == request.auth.token.email
-        && request.resource.data.hasLicense is bool
-        && request.resource.data.blocked is bool
-        && request.resource.data.activatedCodes is list;
-
-      // Обновление: владелец может обновлять свои данные (кроме защищенных полей)
-      allow update: if isOwner(userId)
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['activatedCodes', 'blocked', 'email']);
-
-      // Обновление: админ может обновлять любые данные (блокировка, лицензия)
-      allow update: if isAdmin();
-
-      // Удаление запрещено для всех
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
       allow delete: if false;
     }
 
     // ========================================
-    // ПРАВИЛА ДЛЯ СЕССИЙ (Мониторинг активности)
+    // SESSIONS - УПРОЩЕННЫЕ ПРАВИЛА
     // ========================================
     match /sessions/{sessionId} {
-      // Владелец может читать и писать свою сессию
-      allow read, write: if isOwner(sessionId)
-        && request.resource.data.userId == sessionId;
-
-      // Админ может читать все сессии для мониторинга
-      allow read: if isAdmin();
-
-      // Админ может обновлять сессии (деактивация при блокировке)
-      allow update: if isAdmin();
-
-      // Удаление разрешено владельцу и админу
+      allow read: if isOwner(sessionId) || isAdmin();
+      allow write: if isOwner(sessionId) || isAdmin();
       allow delete: if isOwner(sessionId) || isAdmin();
     }
 
     // ========================================
-    // ПРАВИЛА ДЛЯ КОДОВ АКТИВАЦИИ
+    // CODES - УПРОЩЕННЫЕ ПРАВИЛА
     // ========================================
     match /codes/{codeId} {
-      // Чтение: все аутентифицированные пользователи (для проверки при активации)
       allow read: if isSignedIn();
-
-      // Создание: только админы
-      allow create: if isAdmin()
-        && request.resource.data.keys().hasAll(['code', 'used', 'createdAt', 'createdBy'])
-        && request.resource.data.code is string
-        && request.resource.data.used == false
-        && request.resource.data.createdBy == request.auth.uid;
-
-      // Обновление: пользователи могут активировать неиспользованные коды
-      allow update: if isSignedIn()
-        && resource.data.used == false  // Код еще не использован
-        && request.resource.data.used == true  // Помечаем как использованный
-        && request.resource.data.usedBy == request.auth.uid  // Привязываем к текущему пользователю
-        && request.resource.data.usedByEmail == request.auth.token.email  // Email совпадает
-        && request.resource.data.diff(resource.data).affectedKeys().hasAll(['used', 'usedBy', 'usedByEmail', 'usedAt']);  // Проверяем что обновляются нужные поля
-
-      // Админ может обновлять коды (деактивация, исправление)
-      allow update: if isAdmin();
-
-      // Удаление: только админ
+      allow create: if isAdmin();
+      allow update: if isSignedIn() || isAdmin();
       allow delete: if isAdmin();
     }
 
     // ========================================
-    // ЛОГИ БЕЗОПАСНОСТИ
+    // SECURITY LOGS - УПРОЩЕННЫЕ ПРАВИЛА
     // ========================================
     match /security_logs/{logId} {
-      // Создание: все аутентифицированные пользователи могут создавать логи
-      allow create: if isSignedIn()
-        && request.resource.data.keys().hasAll(['userId', 'eventType', 'timestamp'])
-        && request.resource.data.userId is string
-        && request.resource.data.eventType is string
-        && request.resource.data.eventType in ['concurrent_login_attempt', 'device_switch', 'device_limit_exceeded', 'user_blocked', 'user_unblocked'];
-
-      // Чтение: только админы
+      allow create: if isSignedIn();
       allow read: if isAdmin();
-
-      // Обновление и удаление запрещены (логи неизменяемы)
       allow update, delete: if false;
     }
 
     // ========================================
-    // ПРАВИЛО ПО УМОЛЧАНИЮ
+    // DEFAULT - DENY ALL
     // ========================================
-    // Все остальные коллекции запрещены
     match /{document=**} {
       allow read, write: if false;
     }
