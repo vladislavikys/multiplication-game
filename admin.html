@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ-панель - Управление кодами</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <script>
+        // 🔥 ВАША FIREBASE КОНФИГУРАЦИЯ (ТА ЖЕ, ЧТО В index.html)
+        const firebaseConfig = {
+          apiKey: "AIzaSyCCUcNvmsdh0nsaZler0PQCrqJfNvEHifY",
+          authDomain: "multiplication-game-22120.firebaseapp.com",
+          projectId: "multiplication-game-22120",
+          storageBucket: "multiplication-game-22120.firebasestorage.app",
+          messagingSenderId: "797459824775",
+          appId: "1:797459824775:web:ce953848b79dd3889b3822"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // ============================================
+        // ГЛАВНЫЙ КОД АДМИН-ПАНЕЛИ
+        // ============================================
+
+        let currentUser = null;
+        let allCodes = [];
+
+        // Проверка авторизации
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('auth-section').style.display = 'none';
+                document.getElementById('admin-panel').style.display = 'block';
+                document.getElementById('admin-email').textContent = user.email;
+                await loadAllCodes();
+            } else {
+                currentUser = null;
+                document.getElementById('auth-section').style.display = 'block';
+                document.getElementById('admin-panel').style.display = 'none';
+            }
+        });
+
+        // Вход
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+                showMessage('✅ Успешный вход!', 'success');
+            } catch (error) {
+                showMessage('❌ Ошибка входа: ' + error.message, 'error');
+            }
+        }
+
+        // Выход
+        async function logout() {
+            await auth.signOut();
+            showMessage('Вы вышли из системы', 'info');
+        }
+
+        // Генерация случайного кода
+        function generateRandomCode() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let code = '';
+            for (let i = 0; i < 4; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            code += '-';
+            for (let i = 0; i < 4; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            document.getElementById('code').value = code;
+        }
+
+        // Добавить код
+        async function addCode() {
+            const code = document.getElementById('code').value.toUpperCase().trim();
+            const games = parseInt(document.getElementById('games').value);
+
+            if (!code) {
+                showMessage('❌ Введите код!', 'error');
+                return;
+            }
+
+            if (!games || games <= 0) {
+                showMessage('❌ Введите количество игр (больше 0)!', 'error');
+                return;
+            }
+
+            try {
+                // Проверяем, существует ли уже такой код
+                const existingCode = await db.collection('codes').doc(code).get();
+                if (existingCode.exists) {
+                    showMessage('❌ Такой код уже существует!', 'error');
+                    return;
+                }
+
+                // Добавляем код
+                await db.collection('codes').doc(code).set({
+                    games: games,
+                    used: false,
+                    usedBy: null,
+                    usedAt: null,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    createdBy: currentUser.email
+                });
+
+                showMessage(`✅ Код ${code} успешно добавлен! (${games} игр)`, 'success');
+
+                // Очищаем форму
+                document.getElementById('code').value = '';
+                document.getElementById('games').value = '10';
+
+                // Обновляем список
+                await loadAllCodes();
+
+            } catch (error) {
+                if (error.code === 'permission-denied') {
+                    showMessage('❌ У вас нет прав для добавления кодов! Проверьте, что ваш email указан в firestore.rules', 'error');
+                } else {
+                    showMessage('❌ Ошибка: ' + error.message, 'error');
+                }
+            }
+        }
+
+        // Загрузить все коды
+        async function loadAllCodes() {
+            try {
+                const snapshot = await db.collection('codes')
+                    .orderBy('createdAt', 'desc')
+                    .get();
+
+                allCodes = [];
+                snapshot.forEach(doc => {
+                    allCodes.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+
+                displayCodes();
+
+            } catch (error) {
+                console.error('Error loading codes:', error);
+                showMessage('❌ Ошибка загрузки кодов', 'error');
+            }
+        }
+
+        // Отобразить коды
+        function displayCodes() {
+            const tbody = document.getElementById('codes-list');
+            tbody.innerHTML = '';
+
+            const stats = {
+                total: allCodes.length,
+                used: allCodes.filter(c => c.used).length,
+                available: allCodes.filter(c => !c.used).length,
+                totalGames: allCodes.reduce((sum, c) => sum + (c.games || 0), 0)
+            };
+
+            document.getElementById('stat-total').textContent = stats.total;
+            document.getElementById('stat-used').textContent = stats.used;
+            document.getElementById('stat-available').textContent = stats.available;
+            document.getElementById('stat-games').textContent = stats.totalGames;
+
+            allCodes.forEach(code => {
+                const row = document.createElement('tr');
+                row.className = code.used ? 'bg-red-50' : 'bg-green-50';
+
+                const usedDate = code.usedAt ? new Date(code.usedAt.toDate()).toLocaleString('ru-RU') : '-';
+                const createdDate = code.createdAt ? new Date(code.createdAt.toDate()).toLocaleString('ru-RU') : '-';
+
+                row.innerHTML = `
+                    <td class="px-4 py-3 font-bold text-lg">${code.id}</td>
+                    <td class="px-4 py-3 text-center">${code.games}</td>
+                    <td class="px-4 py-3 text-center">
+                        ${code.used
+                            ? '<span class="bg-red-500 text-white px-3 py-1 rounded-full font-bold">Использован</span>'
+                            : '<span class="bg-green-500 text-white px-3 py-1 rounded-full font-bold">Доступен</span>'}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600">${code.usedBy || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-600">${usedDate}</td>
+                    <td class="px-4 py-3 text-sm text-gray-600">${createdDate}</td>
+                    <td class="px-4 py-3 text-center">
+                        ${!code.used ? `<button onclick="deleteCode('${code.id}')" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded font-bold">Удалить</button>` : '-'}
+                    </td>
+                `;
+
+                tbody.appendChild(row);
+            });
+        }
+
+        // Удалить код (только неиспользованные)
+        async function deleteCode(codeId) {
+            if (!confirm(`Вы уверены, что хотите удалить код ${codeId}?`)) {
+                return;
+            }
+
+            try {
+                await db.collection('codes').doc(codeId).delete();
+                showMessage(`✅ Код ${codeId} удален`, 'success');
+                await loadAllCodes();
+            } catch (error) {
+                showMessage('❌ Ошибка удаления: ' + error.message, 'error');
+            }
+        }
+
+        // Показать сообщение
+        function showMessage(text, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = text;
+            messageDiv.className = `p-4 rounded-lg font-bold mb-4 ${
+                type === 'success' ? 'bg-green-100 text-green-800 border-2 border-green-500' :
+                type === 'error' ? 'bg-red-100 text-red-800 border-2 border-red-500' :
+                'bg-blue-100 text-blue-800 border-2 border-blue-500'
+            }`;
+            messageDiv.style.display = 'block';
+
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Массовое создание кодов
+        async function bulkCreateCodes() {
+            const count = parseInt(document.getElementById('bulk-count').value);
+            const games = parseInt(document.getElementById('bulk-games').value);
+
+            if (!count || count <= 0 || count > 100) {
+                showMessage('❌ Введите количество от 1 до 100', 'error');
+                return;
+            }
+
+            if (!games || games <= 0) {
+                showMessage('❌ Введите количество игр (больше 0)', 'error');
+                return;
+            }
+
+            if (!confirm(`Создать ${count} кодов по ${games} игр каждый?`)) {
+                return;
+            }
+
+            const createdCodes = [];
+            let errors = 0;
+
+            for (let i = 0; i < count; i++) {
+                try {
+                    // Генерируем уникальный код
+                    let code;
+                    let attempts = 0;
+                    do {
+                        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                        code = '';
+                        for (let j = 0; j < 4; j++) {
+                            code += chars.charAt(Math.floor(Math.random() * chars.length));
+                        }
+                        code += '-';
+                        for (let j = 0; j < 4; j++) {
+                            code += chars.charAt(Math.floor(Math.random() * chars.length));
+                        }
+                        attempts++;
+                    } while (createdCodes.includes(code) && attempts < 10);
+
+                    if (attempts >= 10) {
+                        errors++;
+                        continue;
+                    }
+
+                    // Проверяем, что код не существует
+                    const existingCode = await db.collection('codes').doc(code).get();
+                    if (existingCode.exists) {
+                        errors++;
+                        continue;
+                    }
+
+                    // Создаем код
+                    await db.collection('codes').doc(code).set({
+                        games: games,
+                        used: false,
+                        usedBy: null,
+                        usedAt: null,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        createdBy: currentUser.email
+                    });
+
+                    createdCodes.push(code);
+
+                } catch (error) {
+                    console.error('Error creating code:', error);
+                    errors++;
+                }
+            }
+
+            showMessage(`✅ Создано ${createdCodes.length} кодов${errors > 0 ? ` (ошибок: ${errors})` : ''}`, 'success');
+
+            // Показываем созданные коды
+            document.getElementById('created-codes-list').textContent = createdCodes.join('\n');
+
+            await loadAllCodes();
+        }
+    </script>
+
+    <div class="min-h-screen p-8">
+        <!-- Сообщения -->
+        <div id="message" style="display: none;"></div>
+
+        <!-- ФОРМА ВХОДА -->
+        <div id="auth-section" style="display: none;" class="max-w-md mx-auto">
+            <div class="bg-white rounded-lg shadow-lg p-8 border-4 border-purple-400">
+                <div class="text-center mb-6">
+                    <div class="text-6xl mb-4">🔐</div>
+                    <h1 class="text-3xl font-black text-purple-600">Админ-панель</h1>
+                    <p class="text-gray-600 mt-2">Управление кодами активации</p>
+                </div>
+
+                <input id="email" type="email" placeholder="Email администратора"
+                    class="w-full border-2 border-purple-300 rounded-lg p-3 mb-4 focus:outline-none focus:border-purple-500">
+
+                <input id="password" type="password" placeholder="Пароль"
+                    class="w-full border-2 border-purple-300 rounded-lg p-3 mb-6 focus:outline-none focus:border-purple-500"
+                    onkeypress="if(event.key==='Enter') login()">
+
+                <button onclick="login()"
+                    class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 rounded-lg">
+                    🔓 ВОЙТИ
+                </button>
+            </div>
+        </div>
+
+        <!-- АДМИН-ПАНЕЛЬ -->
+        <div id="admin-panel" style="display: none;">
+            <!-- Заголовок -->
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-8 border-4 border-purple-400">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h1 class="text-4xl font-black text-purple-600 mb-2">🎮 Админ-панель</h1>
+                        <p class="text-gray-600">Управление кодами активации</p>
+                        <p class="text-sm text-gray-500 mt-1">Администратор: <span id="admin-email" class="font-bold"></span></p>
+                    </div>
+                    <button onclick="logout()"
+                        class="bg-red-500 hover:bg-red-600 text-white font-bold px-6 py-3 rounded-lg">
+                        🚪 Выйти
+                    </button>
+                </div>
+            </div>
+
+            <!-- Статистика -->
+            <div class="grid grid-cols-4 gap-4 mb-8">
+                <div class="bg-blue-500 text-white rounded-lg shadow-lg p-6 text-center">
+                    <div class="text-4xl font-black" id="stat-total">0</div>
+                    <div class="text-sm font-bold mt-2">Всего кодов</div>
+                </div>
+                <div class="bg-green-500 text-white rounded-lg shadow-lg p-6 text-center">
+                    <div class="text-4xl font-black" id="stat-available">0</div>
+                    <div class="text-sm font-bold mt-2">Доступно</div>
+                </div>
+                <div class="bg-red-500 text-white rounded-lg shadow-lg p-6 text-center">
+                    <div class="text-4xl font-black" id="stat-used">0</div>
+                    <div class="text-sm font-bold mt-2">Использовано</div>
+                </div>
+                <div class="bg-purple-500 text-white rounded-lg shadow-lg p-6 text-center">
+                    <div class="text-4xl font-black" id="stat-games">0</div>
+                    <div class="text-sm font-bold mt-2">Всего игр</div>
+                </div>
+            </div>
+
+            <!-- Создание кода -->
+            <div class="grid grid-cols-2 gap-8 mb-8">
+                <!-- Одиночное создание -->
+                <div class="bg-white rounded-lg shadow-lg p-6 border-2 border-purple-300">
+                    <h2 class="text-2xl font-black text-purple-600 mb-4">➕ Создать код</h2>
+
+                    <div class="mb-4">
+                        <label class="block text-gray-700 font-bold mb-2">Код активации:</label>
+                        <div class="flex gap-2">
+                            <input id="code" type="text" placeholder="XXXX-XXXX" maxlength="9"
+                                class="flex-1 border-2 border-purple-300 rounded-lg p-3 font-bold uppercase text-lg focus:outline-none focus:border-purple-500"
+                                style="text-transform: uppercase;">
+                            <button onclick="generateRandomCode()"
+                                class="bg-gray-500 hover:bg-gray-600 text-white font-bold px-4 rounded-lg">
+                                🎲
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <label class="block text-gray-700 font-bold mb-2">Количество игр:</label>
+                        <input id="games" type="number" value="10" min="1" max="1000"
+                            class="w-full border-2 border-purple-300 rounded-lg p-3 font-bold text-lg focus:outline-none focus:border-purple-500">
+                    </div>
+
+                    <button onclick="addCode()"
+                        class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 rounded-lg text-lg">
+                        ✅ СОЗДАТЬ КОД
+                    </button>
+                </div>
+
+                <!-- Массовое создание -->
+                <div class="bg-white rounded-lg shadow-lg p-6 border-2 border-green-300">
+                    <h2 class="text-2xl font-black text-green-600 mb-4">⚡ Массовое создание</h2>
+
+                    <div class="mb-4">
+                        <label class="block text-gray-700 font-bold mb-2">Количество кодов:</label>
+                        <input id="bulk-count" type="number" value="10" min="1" max="100"
+                            class="w-full border-2 border-green-300 rounded-lg p-3 font-bold text-lg focus:outline-none focus:border-green-500">
+                    </div>
+
+                    <div class="mb-6">
+                        <label class="block text-gray-700 font-bold mb-2">Игр на каждый код:</label>
+                        <input id="bulk-games" type="number" value="10" min="1" max="1000"
+                            class="w-full border-2 border-green-300 rounded-lg p-3 font-bold text-lg focus:outline-none focus:border-green-500">
+                    </div>
+
+                    <button onclick="bulkCreateCodes()"
+                        class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg text-lg">
+                        ⚡ СОЗДАТЬ ПАКЕТ
+                    </button>
+
+                    <div class="mt-4">
+                        <label class="block text-gray-700 font-bold mb-2">Созданные коды:</label>
+                        <textarea id="created-codes-list" readonly
+                            class="w-full h-32 border-2 border-gray-300 rounded-lg p-2 text-sm font-mono bg-gray-50"
+                            placeholder="Созданные коды появятся здесь..."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Таблица кодов -->
+            <div class="bg-white rounded-lg shadow-lg p-6 border-2 border-purple-300">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-black text-purple-600">📋 Все коды</h2>
+                    <button onclick="loadAllCodes()"
+                        class="bg-blue-500 hover:bg-blue-600 text-white font-bold px-4 py-2 rounded-lg">
+                        🔄 Обновить
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-purple-500 text-white">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-bold">Код</th>
+                                <th class="px-4 py-3 text-center font-bold">Игр</th>
+                                <th class="px-4 py-3 text-center font-bold">Статус</th>
+                                <th class="px-4 py-3 text-left font-bold">Использован кем</th>
+                                <th class="px-4 py-3 text-left font-bold">Дата использования</th>
+                                <th class="px-4 py-3 text-left font-bold">Дата создания</th>
+                                <th class="px-4 py-3 text-center font-bold">Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="codes-list">
+                            <!-- Коды будут добавлены здесь -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
