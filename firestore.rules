@@ -92,7 +92,7 @@ service cloud.firestore {
         && request.resource.data.used == true  // Помечаем как использованный
         && request.resource.data.usedBy == request.auth.uid  // Привязываем к текущему пользователю
         && request.resource.data.usedByEmail == request.auth.token.email  // Email совпадает
-        && request.resource.data.keys().hasAll(['usedAt', 'usedBy', 'usedByEmail']);  // Обязательные поля при активации
+        && request.resource.data.diff(resource.data).affectedKeys().hasAll(['used', 'usedBy', 'usedByEmail', 'usedAt']);  // Проверяем что обновляются нужные поля
 
       // Админ может обновлять коды (деактивация, исправление)
       allow update: if isAdmin();
