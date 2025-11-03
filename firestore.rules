@@ -11,7 +11,7 @@ service cloud.firestore {
       allow read: if request.auth != null &&
         (request.auth.uid == userId ||
          request.auth.token.email in [
-           'your-admin-email@example.com'  // ЗАМЕНИТЕ НА ВАШ EMAIL АДМИНА!
+           'zarya.vlad@yandex.ru'
          ]);
 
       // Пользователь может создать свой документ при регистрации
@@ -33,7 +33,7 @@ service cloud.firestore {
       // Админы могут читать все сессии для мониторинга
       allow read: if request.auth != null &&
         request.auth.token.email in [
-          'your-admin-email@example.com'  // ЗАМЕНИТЕ НА ВАШ EMAIL АДМИНА!
+          'zarya.vlad@yandex.ru'
         ];
     }
 
@@ -48,7 +48,7 @@ service cloud.firestore {
       // Добавьте email админа в Firebase Authentication
       allow create: if request.auth != null
         && request.auth.token.email in [
-          'your-admin-email@example.com'  // ЗАМЕНИТЕ НА ВАШ EMAIL АДМИНА!
+          'zarya.vlad@yandex.ru'
         ];
 
       // Обновление кода разрешено только для активации (пометка used=true)
@@ -60,6 +60,23 @@ service cloud.firestore {
 
       // Удаление запрещено
       allow delete: if false;
+    }
+
+    // ========================================
+    // ЛОГИ БЕЗОПАСНОСТИ
+    // ========================================
+    match /security_logs/{logId} {
+      // Пользователи могут записывать логи (создавать)
+      allow create: if request.auth != null;
+
+      // Только админы могут читать логи
+      allow read: if request.auth != null &&
+        request.auth.token.email in [
+          'zarya.vlad@yandex.ru'
+        ];
+
+      // Никто не может обновлять или удалять логи
+      allow update, delete: if false;
     }
   }
 }

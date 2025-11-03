@@ -120,6 +120,53 @@
             }
           };
 
+          // Логирование подозрительной активности
+          const logSecurityEvent = async (userId, eventType, details) => {
+            try {
+              await db.collection('security_logs').add({
+                userId,
+                eventType,
+                details,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                deviceId: getDeviceId(),
+                ...await getDeviceInfo()
+              });
+            } catch (error) {
+              console.error('Error logging security event:', error);
+            }
+          };
+
+          // Проверка частоты смены устройств
+          const checkDeviceSwitchLimit = async (userId) => {
+            try {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+
+              const logsSnapshot = await db.collection('security_logs')
+                .where('userId', '==', userId)
+                .where('eventType', '==', 'device_switch')
+                .where('timestamp', '>=', today)
+                .get();
+
+              const switchCount = logsSnapshot.size;
+
+              // Максимум 3 смены устройств в день
+              if (switchCount >= 3) {
+                alert('⚠️ ПОДОЗРИТЕЛЬНАЯ АКТИВНОСТЬ!\n\nВы превысили лимит смены устройств (3 раза в день).\n\nЭто выглядит как попытка расшарить аккаунт.\n\nДоступ временно ограничен.\n\nСвяжитесь с поддержкой.');
+                await logSecurityEvent(userId, 'device_limit_exceeded', {
+                  switchCount,
+                  blocked: true
+                });
+                return false;
+              }
+
+              return true;
+            } catch (error) {
+              console.error('Error checking device switch limit:', error);
+              return true;
+            }
+          };
+
           // Проверка множественных входов
           const checkMultipleDevices = async (userId) => {
             const deviceId = getDeviceId();
@@ -132,6 +179,27 @@
 
                 // Если это другое устройство
                 if (sessionData.deviceId !== deviceId && sessionData.isActive) {
+                  // Логируем попытку множественного входа
+                  await logSecurityEvent(userId, 'concurrent_login_attempt', {
+                    currentDevice: deviceId,
+                    activeDevice: sessionData.deviceId,
+                    currentIP: (await getDeviceInfo()).ipAddress,
+                    activeIP: sessionData.ipAddress
+                  });
+
+                  // Проверяем лимит смены устройств
+                  const canSwitch = await checkDeviceSwitchLimit(userId);
+                  if (!canSwitch) {
+                    await auth.signOut();
+                    return false;
+                  }
+
+                  // Логируем смену устройства
+                  await logSecurityEvent(userId, 'device_switch', {
+                    oldDevice: sessionData.deviceId,
+                    newDevice: deviceId
+                  });
+
                   // Выгоняем пользователя
                   alert('⚠️ ВНИМАНИЕ!\n\nВаш аккаунт уже используется на другом устройстве.\n\nОдин аккаунт = одно устройство!\n\nЕсли это не вы, срочно смените пароль.');
                   await auth.signOut();
