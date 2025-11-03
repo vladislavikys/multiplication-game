@@ -1,0 +1,6 @@
+# Скрыть админ-панель от поисковых систем
+User-agent: *
+Disallow: /admin-secret-panel-xyz789.html
+
+# Разрешить индексацию основного сайта
+Allow: /
