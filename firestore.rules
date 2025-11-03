@@ -19,8 +19,14 @@ service cloud.firestore {
 
       // Пользователь может обновлять только свои данные
       allow update: if request.auth != null && request.auth.uid == userId
-        // Нельзя изменять activatedCodes напрямую (только через активацию кода)
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['activatedCodes']));
+        // Нельзя изменять activatedCodes и blocked напрямую
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['activatedCodes', 'blocked']));
+
+      // Админы могут блокировать/разблокировать пользователей
+      allow update: if request.auth != null &&
+        request.auth.token.email in [
+          'zarya.vlad@yandex.ru'
+        ];
     }
 
     // ========================================
