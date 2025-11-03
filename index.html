@@ -3,48 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Таблица умножения - Игра</title>
+    <title>Математика - Игра</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // 🔑 СПИСОК АКТИВАЦИОННЫХ КОДОВ (100 штук)
-        const ACTIVATION_CODES = {
-          '7A4B-9F2E': 10, '3K8D-5M1R': 10, 'Q2W6-E4RT': 10, '9P0L-K3J7': 10, 
-          'H6G5-F4D8': 10, 'N1M2-V3B9': 10, 'Z7X8-C6V5': 10, 'A9S8-D7F6': 10,
-          'G4H3-J2K1': 10, 'L5P6-O7I8': 10, 'U9Y8-T7R6': 10, 'E5W4-Q3A2': 10,
-          'S1D2-F3G4': 10, 'H5J6-K7L8': 10, 'Z9X8-C7V6': 10, 'B5N4-M3Q2': 10,
-          'W1E2-R3T4': 10, 'Y5U6-I7O8': 10, 'P9A8-S7D6': 10, 'F5G4-H3J2': 10,
-          'K1L2-Z3X4': 10, 'C5V6-B7N8': 10, 'M9Q2-W3E4': 10, 'R5T6-Y7U8': 10,
-          'I9O8-P7L6': 10, 'K5J4-H3G2': 10, 'F1D2-S3A4': 10, 'Q5W6-E7R8': 10,
-          'T9Y8-U7I6': 10, 'O5P4-L3K2': 10, 'J1H2-G3F4': 10, 'D5S6-A7Z8': 10,
-          'X9C8-V7B6': 10, 'N5M4-Q3W2': 10, 'E1R2-T3Y4': 10, 'U5I6-O7P8': 10,
-          'A9S8-D7F6': 10, 'G5H4-J3K2': 10, 'L1Z2-X3C4': 10, 'V5B6-N7M8': 10,
-          'Q9W8-E7R6': 10, 'T5Y4-U3I2': 10, 'O1P2-L3K4': 10, 'J5H6-G7F8': 10,
-          'D9S8-A7Q6': 10, 'W5E4-R3T2': 10, 'Y1U2-I3O4': 10, 'P5A6-S7D8': 10,
-          'F9G8-H7J6': 10, 'K5L4-Z3X2': 10, 'C1V2-B3N4': 10, 'M5Q6-W7E8': 10,
-          'R9T8-Y7U6': 10, 'I5O4-P3L2': 10, 'K1J2-H3G4': 10, 'F5D6-S7A8': 10,
-          'Q9W8-E7R6': 10, 'T5Y4-U3I2': 10, 'O1P2-L3K4': 10, 'J5H6-G7F8': 10,
-          '2B7C-4M9N': 10, '6K3L-8P1Q': 10, '5R9S-2T4W': 10, '8E1F-7G3H': 10,
-          '4J6K-9L2M': 10, '3N5O-7P8Q': 10, '1R2S-4T6U': 10, '9V8W-5X3Y': 10,
-          '7Z2A-6B4C': 10, '3D5E-8F9G': 10, '6H4I-2J7K': 10, '5L9M-3N1O': 10,
-          '8P2Q-7R4S': 10, '4T6U-9V3W': 10, '2X5Y-8Z1A': 10, '7B3C-6D5E': 10,
-          '9F4G-2H8I': 10, '3J7K-5L1M': 10, '6N8O-4P9Q': 10, '2R5S-7T3U': 10,
-          '8V1W-6X4Y': 10, '5Z9A-3B2C': 10, '4D7E-8F6G': 10, '9H2I-5J3K': 10,
-          '7L6M-4N8O': 10, '3P1Q-9R5S': 10, '6T4U-2V7W': 10, '8X5Y-3Z9A': 10,
-          '2B6C-7D4E': 10, '5F9G-8H3I': 10, '4J2K-6L7M': 10, '9N5O-3P1Q': 10,
-          '7R8S-2T4U': 10, '3V6W-5X9Y': 10, '8Z4A-7B2C': 10, '6D1E-9F5G': 10,
-          '2H7I-4J8K': 10, '5L3M-9N6O': 10, '8P2Q-7R1S': 10, '4T9U-3V5W': 10
+        // 🔥 ВАША FIREBASE КОНФИГУРАЦИЯ
+        const firebaseConfig = {
+          apiKey: "AIzaSyCCUcNvmsdh0nsaZler0PQCrqJfNvEHifY",
+          authDomain: "multiplication-game-22120.firebaseapp.com",
+          projectId: "multiplication-game-22120",
+          storageBucket: "multiplication-game-22120.firebasestorage.app",
+          messagingSenderId: "797459824775",
+          appId: "1:797459824775:web:ce953848b79dd3889b3822"
         };
 
+        if (!firebase.apps.length) {
+          firebase.initializeApp(firebaseConfig);
+        }
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
         function MultiplicationGame() {
-          const [gameState, setGameState] = useState('activation');
+          const [user, setUser] = useState(null);
+          const [loading, setLoading] = useState(true);
+          const [authMode, setAuthMode] = useState('login');
+          const [email, setEmail] = useState('');
+          const [password, setPassword] = useState('');
+          const [gameState, setGameState] = useState('auth');
           const [activationCode, setActivationCode] = useState('');
           const [gamesLeft, setGamesLeft] = useState(0);
           const [showActivation, setShowActivation] = useState(false);
@@ -77,15 +74,77 @@
             } catch (e) {
               console.log('Audio not supported');
             }
-            
-            const saved = localStorage.getItem('gamesLeft');
-            if (saved && parseInt(saved) > 0) {
-              setGamesLeft(parseInt(saved));
-              setGameState('setup');
-            } else {
-              setGameState('activation');
-            }
+
+            const unsubscribe = auth.onAuthStateChanged(async (user) => {
+              if (user) {
+                setUser(user);
+                await loadUserData(user.uid);
+                setGameState('setup');
+              } else {
+                setUser(null);
+                setGameState('auth');
+              }
+              setLoading(false);
+            });
+
+            return () => unsubscribe();
           }, []);
+
+          const loadUserData = async (userId) => {
+            try {
+              const doc = await db.collection('users').doc(userId).get();
+              if (doc.exists) {
+                const data = doc.data();
+                setGamesLeft(data.gamesLeft || 0);
+              } else {
+                await db.collection('users').doc(userId).set({
+                  gamesLeft: 0,
+                  createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                setGamesLeft(0);
+              }
+            } catch (error) {
+              console.error('Error loading user data:', error);
+            }
+          };
+
+          const updateGamesLeft = async (newGamesLeft) => {
+            if (!user) return;
+            try {
+              await db.collection('users').doc(user.uid).update({
+                gamesLeft: newGamesLeft
+              });
+              setGamesLeft(newGamesLeft);
+            } catch (error) {
+              console.error('Error updating games:', error);
+            }
+          };
+
+          const handleRegister = async () => {
+            try {
+              await auth.createUserWithEmailAndPassword(email, password);
+              alert('✅ Регистрация успешна!');
+            } catch (error) {
+              alert('❌ Ошибка: ' + error.message);
+            }
+          };
+
+          const handleLogin = async () => {
+            try {
+              await auth.signInWithEmailAndPassword(email, password);
+            } catch (error) {
+              alert('❌ Ошибка входа: ' + error.message);
+            }
+          };
+
+          const handleLogout = async () => {
+            try {
+              await auth.signOut();
+              setGameState('auth');
+            } catch (error) {
+              console.error('Error signing out:', error);
+            }
+          };
 
           const toggleOperation = (op) => {
             const newOps = { ...operations, [op]: !operations[op] };
@@ -95,18 +154,45 @@
             }
           };
 
-          const activateCode = () => {
+          const activateCode = async () => {
+            if (!user) {
+              alert('❌ Ошибка: пользователь не авторизован');
+              return;
+            }
+
             const code = activationCode.toUpperCase().trim();
-            if (ACTIVATION_CODES[code]) {
-              const newGamesLeft = gamesLeft + ACTIVATION_CODES[code];
-              setGamesLeft(newGamesLeft);
-              localStorage.setItem('gamesLeft', newGamesLeft);
+            
+            try {
+              const codeDoc = await db.collection('codes').doc(code).get();
+              
+              if (!codeDoc.exists) {
+                alert('❌ Код не найден!');
+                return;
+              }
+
+              const codeData = codeDoc.data();
+
+              if (codeData.used) {
+                alert(`❌ Этот код уже был использован ${codeData.usedBy === user.uid ? 'вами' : 'другим пользователем'}!`);
+                return;
+              }
+
+              await db.collection('codes').doc(code).update({
+                used: true,
+                usedBy: user.uid,
+                usedAt: firebase.firestore.FieldValue.serverTimestamp()
+              });
+
+              const newGamesLeft = gamesLeft + codeData.games;
+              await updateGamesLeft(newGamesLeft);
+
               setActivationCode('');
               setShowActivation(false);
-              setGameState('setup');
-              alert(`✅ Код активирован! Добавлено ${ACTIVATION_CODES[code]} игр. Всего игр: ${newGamesLeft}`);
-            } else {
-              alert('❌ Неверный код активации!');
+              alert(`✅ Код активирован! Добавлено ${codeData.games} игр. Всего игр: ${newGamesLeft}`);
+              
+            } catch (error) {
+              console.error('Error activating code:', error);
+              alert('❌ Ошибка активации кода. Попробуйте снова.');
             }
           };
 
@@ -157,7 +243,7 @@
             setTimeout(() => playSound(1046.5, 0.2), 150);
           };
 
-          const startGame = () => {
+          const startGame = async () => {
             if (gamesLeft <= 0) {
               alert('❌ У вас закончились игры! Введите код активации.');
               setShowActivation(true);
@@ -165,8 +251,7 @@
             }
             
             const newGamesLeft = gamesLeft - 1;
-            setGamesLeft(newGamesLeft);
-            localStorage.setItem('gamesLeft', newGamesLeft);
+            await updateGamesLeft(newGamesLeft);
             
             setGameState('playing');
             setScore(0);
@@ -302,6 +387,12 @@
             if (e.key === 'Enter' && answer !== '') checkAnswer();
           };
 
+          const handleAuthKeyPress = (e) => {
+            if (e.key === 'Enter') {
+              authMode === 'login' ? handleLogin() : handleRegister();
+            }
+          };
+
           const handleActivationKeyPress = (e) => {
             if (e.key === 'Enter' && activationCode !== '') activateCode();
           };
@@ -318,43 +409,61 @@
             backgroundSize: '60px 60px'
           };
 
-          if (gameState === 'activation') {
+          if (loading) {
+            return (
+              <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center">
+                <div className="text-6xl">⏳</div>
+              </div>
+            );
+          }
+
+          if (gameState === 'auth') {
             return (
               <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
-                <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-red-400">
+                <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-purple-400">
                   <div className="text-center mb-8">
-                    <div className="text-6xl mb-4">🔐</div>
-                    <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-600 mb-2">
-                      Требуется активация
+                    <div className="text-6xl mb-4">🎓</div>
+                    <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 mb-2">
+                      {authMode === 'login' ? 'Вход' : 'Регистрация'}
                     </h1>
-                    <p className="text-gray-700 font-bold text-lg mb-4">У вас 0 доступных игр</p>
-                    <p className="text-gray-600 text-sm">Введите код активации для начала игры</p>
+                    <p className="text-purple-600 font-bold">Математическая игра</p>
+                  </div>
+
+                  <div className="mb-4">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      onKeyPress={handleAuthKeyPress}
+                      placeholder="Email"
+                      className="w-full text-lg border-2 border-purple-300 rounded-xl p-3 focus:outline-none focus:border-purple-500"
+                    />
                   </div>
 
                   <div className="mb-6">
                     <input
-                      type="text"
-                      value={activationCode}
-                      onChange={(e) => setActivationCode(e.target.value.toUpperCase())}
-                      onKeyPress={handleActivationKeyPress}
-                      placeholder="XXXX-XXXX"
-                      maxLength="9"
-                      className="w-full text-3xl text-center border-4 border-red-300 rounded-2xl p-4 focus:outline-none focus:border-red-500 font-bold uppercase tracking-widest"
-                      autoFocus
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyPress={handleAuthKeyPress}
+                      placeholder="Пароль"
+                      className="w-full text-lg border-2 border-purple-300 rounded-xl p-3 focus:outline-none focus:border-purple-500"
                     />
                   </div>
 
                   <button
-                    onClick={activateCode}
-                    className="w-full bg-gradient-to-r from-red-500 to-orange-500 text-white text-2xl font-black py-5 rounded-2xl hover:from-red-600 hover:to-orange-600 transition-all transform hover:scale-105 shadow-lg mb-4"
+                    onClick={authMode === 'login' ? handleLogin : handleRegister}
+                    className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xl font-black py-4 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all shadow-lg mb-4"
                   >
-                    АКТИВИРОВАТЬ
+                    {authMode === 'login' ? 'ВОЙТИ' : 'ЗАРЕГИСТРИРОВАТЬСЯ'}
                   </button>
 
-                  <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4 text-sm text-blue-800">
-                    <p className="font-bold mb-2">ℹ️ Как получить код?</p>
-                    <p>Свяжитесь с администратором для покупки кода активации. Каждый код даёт доступ к 10 играм.</p>
-                  </div>
+                  <button
+                    onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+                    className="w-full text-purple-600 font-semibold"
+                  >
+                    {authMode === 'login' ? 'Нет аккаунта? Зарегистрируйтесь' : 'Есть аккаунт? Войдите'}
+                  </button>
                 </div>
               </div>
             );
@@ -366,8 +475,16 @@
                 <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-purple-400 relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"></div>
                   
-                  <div className="absolute top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-full font-bold shadow-lg">
-                    🎮 Игр: {gamesLeft}
+                  <div className="flex justify-between items-center mb-6">
+                    <div className="bg-green-500 text-white px-4 py-2 rounded-full font-bold shadow-lg">
+                      🎮 Игр: {gamesLeft}
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="bg-red-500 text-white px-4 py-2 rounded-full font-bold shadow-lg hover:bg-red-600"
+                    >
+                      🚪 Выйти
+                    </button>
                   </div>
 
                   {showActivation && (
@@ -412,43 +529,43 @@
                     <div className="grid grid-cols-2 gap-3 mb-4">
                       <button
                         onClick={() => toggleOperation('multiply')}
-                        className={`py-4 rounded-xl font-black text-2xl transition-all transform hover:scale-105 ${
+                        className={`py-4 rounded-xl font-black text-xl transition-all transform hover:scale-105 ${
                           operations.multiply 
                             ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-lg' 
                             : 'bg-white text-purple-500 border-2 border-purple-300'
                         }`}
                       >
-                        × Умножение
+                        ×
                       </button>
                       <button
                         onClick={() => toggleOperation('divide')}
-                        className={`py-4 rounded-xl font-black text-2xl transition-all transform hover:scale-105 ${
+                        className={`py-4 rounded-xl font-black text-xl transition-all transform hover:scale-105 ${
                           operations.divide 
                             ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg' 
                             : 'bg-white text-blue-500 border-2 border-blue-300'
                         }`}
                       >
-                        ÷ Деление
+                        ÷
                       </button>
                       <button
                         onClick={() => toggleOperation('add')}
-                        className={`py-4 rounded-xl font-black text-2xl transition-all transform hover:scale-105 ${
+                        className={`py-4 rounded-xl font-black text-xl transition-all transform hover:scale-105 ${
                           operations.add 
                             ? 'bg-gradient-to-br from-green-500 to-green-600 text-white shadow-lg' 
                             : 'bg-white text-green-500 border-2 border-green-300'
                         }`}
                       >
-                        + Сложение
+                        +
                       </button>
                       <button
                         onClick={() => toggleOperation('subtract')}
-                        className={`py-4 rounded-xl font-black text-2xl transition-all transform hover:scale-105 ${
+                        className={`py-4 rounded-xl font-black text-xl transition-all transform hover:scale-105 ${
                           operations.subtract 
                             ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg' 
                             : 'bg-white text-orange-500 border-2 border-orange-300'
                         }`}
                       >
-                        − Вычитание
+                        −
                       </button>
                     </div>
                   </div>
@@ -523,19 +640,19 @@
 
                   <div className="grid grid-cols-3 gap-4 mb-6">
                     <div className="bg-gradient-to-br from-green-400 to-emerald-500 rounded-2xl p-4 text-center shadow-lg">
-<div className="text-4xl font-black text-white">{score}</div>
-<div className="text-sm font-bold text-white">✓ Правильно</div>
-</div>
-<div className="bg-gradient-to-br from-blue-400 to-indigo-500 rounded-2xl p-4 text-center shadow-lg">
-<div className="text-4xl font-black text-white">{totalRounds}</div>
-<div className="text-sm font-bold text-white">📝 Всего</div>
-</div>
-<div className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-4 text-center shadow-lg">
-<div className="text-4xl font-black text-white">{percentage}%</div>
-<div className="text-sm font-bold text-white">📊 Процент</div>
-</div>
-</div>
-<div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-4 mb-6 border-2 border-purple-300">
+                      <div className="text-4xl font-black text-white">{score}</div>
+                      <div className="text-sm font-bold text-white">✓ Правильно</div>
+                    </div>
+                    <div className="bg-gradient-to-br from-blue-400 to-indigo-500 rounded-2xl p-4 text-center shadow-lg">
+                      <div className="text-4xl font-black text-white">{totalRounds}</div>
+                        <div className="text-sm font-bold text-white">📝 Всего</div>
+                    </div>
+                    <div className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-4 text-center shadow-lg">
+                      <div className="text-4xl font-black text-white">{percentage}%</div>
+                      <div className="text-sm font-bold text-white">📊 Процент</div>
+                    </div>
+                  </div>
+                    <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-4 mb-6 border-2 border-purple-300">
                 <div className="text-center text-xl font-black text-purple-700">
                   ⭐ Лучшая серия: {bestStreak} подряд! ⭐
                 </div>
