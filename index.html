@@ -240,13 +240,14 @@
                 return;
               }
 
-              // Подозрительный паттерн 2: Более 10 попыток за 1 час
+              // Подозрительный паттерн 2: Более 10 попыток С РАЗНЫХ устройств за 1 час
               const recentLogs = logs.filter(log => log.timestamp && log.timestamp.toDate() >= last1h);
-              if (recentLogs.length >= 10) {
+              const recentUniqueDevices = new Set(recentLogs.map(log => log.deviceId).filter(d => d));
+              if (recentUniqueDevices.size >= 10) {
                 await db.collection('users').doc(userId).update({ blocked: true });
                 await logSecurityEvent(userId, 'auto_blocked_sharing', {
-                  reason: 'Более 10 попыток входа за 1 час',
-                  attemptCount: recentLogs.length
+                  reason: 'Более 10 разных устройств за 1 час',
+                  deviceCount: recentUniqueDevices.size
                 });
                 return;
               }
@@ -427,12 +428,12 @@
 
                   setGameState('setup');
 
-                  // Обновляем сессию каждые 30 секунд
+                  // Обновляем сессию каждые 10 секунд (чаще проверка защиты от множественного входа)
                   const sessionInterval = setInterval(() => {
                     if (auth.currentUser) {
                       updateSession(auth.currentUser.uid);
                     }
-                  }, 30000);
+                  }, 10000);
 
                   // Очищаем интервал при выходе
                   return () => clearInterval(sessionInterval);
