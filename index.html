@@ -385,6 +385,10 @@
                 return;
               }
 
+              // ВАЖНО: Создаем активную сессию для НОВОГО устройства
+              // skipDeviceCheck=true потому что checkAndSwitchDevice уже все проверил
+              await updateSession(userId, true);
+
               // Успешный вход - Firebase обработает через onAuthStateChanged
             } catch (error) {
               alert('❌ Ошибка входа: ' + error.message);
