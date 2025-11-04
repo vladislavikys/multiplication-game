@@ -45,6 +45,7 @@
           const [activationCode, setActivationCode] = useState('');
           const [hasLicense, setHasLicense] = useState(false);
           const [showActivation, setShowActivation] = useState(false);
+          const [isCheckingDevice, setIsCheckingDevice] = useState(false);
           const [totalRounds, setTotalRounds] = useState(10);
           const [operations, setOperations] = useState({
             multiply: true,
@@ -68,11 +69,39 @@
           
           const audioContextRef = useRef(null);
 
-          // Генерация Device ID (fingerprint устройства)
+          // Генерация Device ID (улучшенный fingerprint устройства)
           const getDeviceId = () => {
             let deviceId = localStorage.getItem('deviceId');
             if (!deviceId) {
-              deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+              // Создаем уникальный fingerprint на основе характеристик браузера
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d');
+              ctx.textBaseline = 'top';
+              ctx.font = '14px Arial';
+              ctx.fillText('fingerprint', 2, 2);
+              const canvasFingerprint = canvas.toDataURL().slice(-50);
+
+              const fingerprint = [
+                navigator.userAgent,
+                navigator.language,
+                screen.width,
+                screen.height,
+                screen.colorDepth,
+                new Date().getTimezoneOffset(),
+                canvasFingerprint,
+                Date.now(),
+                Math.random().toString(36)
+              ].join('|');
+
+              // Создаем короткий hash
+              let hash = 0;
+              for (let i = 0; i < fingerprint.length; i++) {
+                const char = fingerprint.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+              }
+
+              deviceId = 'device_' + Math.abs(hash).toString(36) + '_' + Date.now();
               localStorage.setItem('deviceId', deviceId);
             }
             return deviceId;
@@ -175,8 +204,64 @@
                 deviceId: getDeviceId(),
                 ...await getDeviceInfo()
               });
+
+              // АВТОМАТИЧЕСКОЕ ОБНАРУЖЕНИЕ SHARING АККАУНТА
+              if (eventType === 'concurrent_login_attempt') {
+                await checkForAccountSharing(userId);
+              }
             } catch (error) {
               console.error('Error logging security event:', error);
+            }
+          };
+
+          // Проверка на sharing аккаунта (автоблокировка)
+          const checkForAccountSharing = async (userId) => {
+            try {
+              const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+              const last1h = new Date(Date.now() - 60 * 60 * 1000);
+
+              // Получаем логи за последние 24 часа
+              const logsSnapshot = await db.collection('security_logs')
+                .where('userId', '==', userId)
+                .where('eventType', '==', 'concurrent_login_attempt')
+                .where('timestamp', '>=', last24h)
+                .get();
+
+              const logs = logsSnapshot.docs.map(doc => doc.data());
+
+              // Подозрительный паттерн 1: Более 5 попыток входа с разных устройств за 24 часа
+              const uniqueDevices = new Set(logs.map(log => log.deviceId));
+              if (uniqueDevices.size >= 5) {
+                await db.collection('users').doc(userId).update({ blocked: true });
+                await logSecurityEvent(userId, 'auto_blocked_sharing', {
+                  reason: 'Более 5 разных устройств за 24 часа',
+                  deviceCount: uniqueDevices.size
+                });
+                return;
+              }
+
+              // Подозрительный паттерн 2: Более 10 попыток за 1 час
+              const recentLogs = logs.filter(log => log.timestamp && log.timestamp.toDate() >= last1h);
+              if (recentLogs.length >= 10) {
+                await db.collection('users').doc(userId).update({ blocked: true });
+                await logSecurityEvent(userId, 'auto_blocked_sharing', {
+                  reason: 'Более 10 попыток входа за 1 час',
+                  attemptCount: recentLogs.length
+                });
+                return;
+              }
+
+              // Подозрительный паттерн 3: Разные IP адреса из разных стран (упрощенная проверка)
+              const uniqueIPs = new Set(logs.map(log => log.ipAddress).filter(ip => ip && ip !== 'unknown'));
+              if (uniqueIPs.size >= 3) {
+                // 3+ разных IP за 24 часа - высокая вероятность sharing
+                await logSecurityEvent(userId, 'suspicious_multiple_ips', {
+                  ipCount: uniqueIPs.size,
+                  ips: Array.from(uniqueIPs)
+                });
+              }
+            } catch (error) {
+              console.error('Error checking for account sharing:', error);
             }
           };
 
@@ -292,6 +377,54 @@
 
                   clearTimeout(loadTimeout);
 
+                  // ПРОВЕРКА: Если идет проверка устройства - НЕ ПУСКАЕМ (ждем результата)
+                  if (isCheckingDevice) {
+                    console.log('⏳ Ожидание проверки устройства...');
+                    // Ждем пока handleLogin завершит checkAndSwitchDevice
+                    const maxWait = 50; // 5 секунд максимум
+                    let waitCount = 0;
+                    while (isCheckingDevice && waitCount < maxWait) {
+                      await new Promise(resolve => setTimeout(resolve, 100));
+                      waitCount++;
+                    }
+
+                    // Если всё еще проверяется или пользователь вышел - не пускаем
+                    if (isCheckingDevice || !auth.currentUser) {
+                      console.log('🚫 Проверка устройства не завершена или пользователь вышел');
+                      setUser(null);
+                      setGameState('auth');
+                      return;
+                    }
+                  }
+
+                  // ФИНАЛЬНАЯ ПРОВЕРКА: Убедиться что пользователь всё еще авторизован
+                  if (!auth.currentUser || !user || user.uid !== auth.currentUser.uid) {
+                    console.log('🚫 КРИТИЧЕСКАЯ ПРОВЕРКА: пользователь не авторизован');
+                    setUser(null);
+                    setGameState('auth');
+                    return;
+                  }
+
+                  // Проверяем что сессия действительно активна для ЭТОГО устройства
+                  try {
+                    const sessionDoc = await db.collection('sessions').doc(user.uid).get();
+                    if (sessionDoc.exists) {
+                      const sessionData = sessionDoc.data();
+                      const currentDeviceId = getDeviceId();
+
+                      // Если активна сессия другого устройства - НЕ ПУСКАЕМ
+                      if (sessionData.deviceId !== currentDeviceId || !sessionData.isActive) {
+                        console.log('🚫 КРИТИЧЕСКАЯ ПРОВЕРКА: сессия неактивна или другое устройство');
+                        await auth.signOut();
+                        setUser(null);
+                        setGameState('auth');
+                        return;
+                      }
+                    }
+                  } catch (error) {
+                    console.error('Ошибка финальной проверки сессии:', error);
+                  }
+
                   setGameState('setup');
 
                   // Обновляем сессию каждые 30 секунд
@@ -378,6 +511,9 @@
 
           const handleLogin = async () => {
             try {
+              // ВАЖНО: Устанавливаем флаг ДО входа чтобы заблокировать onAuthStateChanged
+              setIsCheckingDevice(true);
+
               // Входим в аккаунт
               const userCredential = await auth.signInWithEmailAndPassword(email, password);
               const userId = userCredential.user.uid;
@@ -388,12 +524,17 @@
               } catch (deviceError) {
                 // Если есть активная сессия на другом устройстве - вход запрещен
                 console.error('Device check failed:', deviceError);
+                setIsCheckingDevice(false); // Сбрасываем флаг
                 return;
               }
+
+              // Проверка прошла - разрешаем onAuthStateChanged продолжить
+              setIsCheckingDevice(false);
 
               // Успешный вход - Firebase обработает через onAuthStateChanged
               // onAuthStateChanged вызовет updateSession который создаст активную сессию
             } catch (error) {
+              setIsCheckingDevice(false); // Сбрасываем флаг при ошибке
               alert('❌ Ошибка входа: ' + error.message);
             }
           };
