@@ -4,20 +4,46 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Математика - Игра</title>
-    <!-- ОПТИМИЗАЦИЯ: Defer скриптов для быстрой загрузки -->
-    <script defer crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script defer crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script defer src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- КРИТИЧЕСКИЕ СКРИПТЫ (без defer для гарантии порядка загрузки) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Firebase - отложенная загрузка для оптимизации -->
-    <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <!-- Firebase - загрузка в обычном режиме для стабильности -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
+        // ============================================
+        // ПРОВЕРКА ГОТОВНОСТИ БИБЛИОТЕК
+        // ============================================
+        if (typeof React === 'undefined' || typeof ReactDOM === 'undefined' || typeof firebase === 'undefined') {
+          console.error('КРИТИЧЕСКАЯ ОШИБКА: Не все библиотеки загружены!', {
+            React: typeof React !== 'undefined',
+            ReactDOM: typeof ReactDOM !== 'undefined',
+            firebase: typeof firebase !== 'undefined'
+          });
+
+          // Показываем сообщение об ошибке пользователю
+          document.getElementById('root').innerHTML = `
+            <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(to bottom right, #e9d5ff, #fce7f3, #bfdbfe); font-family: system-ui;">
+              <div style="background: white; border-radius: 24px; padding: 32px; max-width: 400px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                <div style="font-size: 64px; margin-bottom: 16px;">❌</div>
+                <h1 style="color: #dc2626; font-size: 24px; font-weight: bold; margin-bottom: 16px;">Ошибка загрузки</h1>
+                <p style="color: #4b5563; margin-bottom: 24px;">Не удалось загрузить необходимые библиотеки. Пожалуйста, обновите страницу.</p>
+                <button onclick="location.reload()" style="background: linear-gradient(to right, #a855f7, #ec4899); color: white; font-weight: bold; padding: 12px 24px; border-radius: 12px; border: none; cursor: pointer; font-size: 16px;">
+                  🔄 Обновить страницу
+                </button>
+              </div>
+            </div>
+          `;
+          throw new Error('Libraries not loaded');
+        }
+
         const { useState, useEffect, useRef } = React;
 
         // 🔥 ВАША FIREBASE КОНФИГУРАЦИЯ
@@ -481,7 +507,19 @@
               console.log('Audio not supported');
             }
 
+            // ============================================
+            // FALLBACK: Гарантированная установка loading = false
+            // ============================================
+            const loadingFallbackTimer = setTimeout(() => {
+              console.warn('⚠️ FALLBACK: Превышено время ожидания инициализации Firebase');
+              setLoading(false);
+              setLoadingStatus('');
+              showNotification('⚠️ Проблема с подключением к серверу. Попробуйте обновить страницу.', 'warning', 8000);
+            }, 5000); // 5 секунд на инициализацию Firebase
+
             const unsubscribe = auth.onAuthStateChanged(async (user) => {
+              // Отменяем fallback таймер, т.к. Firebase работает
+              clearTimeout(loadingFallbackTimer);
               try {
                 if (user) {
                   setUser(user);
@@ -571,7 +609,10 @@
               }
             });
 
-            return () => unsubscribe();
+            return () => {
+              clearTimeout(loadingFallbackTimer);
+              unsubscribe();
+            };
           }, []);
 
           const loadUserData = async (userObj) => {
