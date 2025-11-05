@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Тест админ панели</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <h1>Тест загрузки админ панели</h1>
+    <div id="status">Проверка...</div>
+    <div id="details"></div>
+
+    <script>
+        const details = document.getElementById('details');
+        const status = document.getElementById('status');
+
+        try {
+            // Проверка 1: Firebase загружен?
+            if (typeof firebase === 'undefined') {
+                throw new Error('Firebase не загружен');
+            }
+            details.innerHTML += '<p>✅ Firebase загружен</p>';
+
+            // Проверка 2: Инициализация Firebase
+            const firebaseConfig = {
+              apiKey: "AIzaSyCCUcNvmsdh0nsaZler0PQCrqJfNvEHifY",
+              authDomain: "multiplication-game-22120.firebaseapp.com",
+              projectId: "multiplication-game-22120",
+              storageBucket: "multiplication-game-22120.firebasestorage.app",
+              messagingSenderId: "797459824775",
+              appId: "1:797459824775:web:ce953848b79dd3889b3822"
+            };
+
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            const auth = firebase.auth();
+            const db = firebase.firestore();
+
+            details.innerHTML += '<p>✅ Firebase инициализирован</p>';
+
+            // Проверка 3: Auth работает?
+            auth.onAuthStateChanged((user) => {
+                if (user) {
+                    details.innerHTML += '<p>✅ Пользователь залогинен: ' + user.email + '</p>';
+                    status.textContent = '✅ ВСЕ РАБОТАЕТ!';
+                    status.style.color = 'green';
+                } else {
+                    details.innerHTML += '<p>⚠️ Пользователь не залогинен</p>';
+                    status.textContent = '⚠️ Firebase работает, но не залогинены';
+                    status.style.color = 'orange';
+                }
+            });
+
+            details.innerHTML += '<p>✅ Auth.onAuthStateChanged настроен</p>';
+
+        } catch (error) {
+            status.textContent = '❌ ОШИБКА!';
+            status.style.color = 'red';
+            details.innerHTML += '<p>❌ Ошибка: ' + error.message + '</p>';
+            details.innerHTML += '<pre>' + error.stack + '</pre>';
+        }
+    </script>
+</body>
+</html>
