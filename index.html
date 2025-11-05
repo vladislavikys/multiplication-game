@@ -14,9 +14,6 @@
     <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-
-    <!-- EmailJS для отправки 2FA кодов (бесплатно, без backend!) -->
-    <script defer src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 </head>
 <body>
     <div id="root"></div>
@@ -39,18 +36,6 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
-        // 📧 EMAILJS КОНФИГУРАЦИЯ для 2FA
-        // ИНСТРУКЦИЯ ПО НАСТРОЙКЕ:
-        // 1. Зарегистрируйтесь на https://www.emailjs.com (бесплатно)
-        // 2. Создайте Email Service (Gmail, Outlook и т.д.)
-        // 3. Создайте Email Template с переменными {{to_email}}, {{code}}, {{user_name}}
-        // 4. Скопируйте Service ID, Template ID и Public Key сюда:
-        const EMAILJS_CONFIG = {
-          serviceId: 'YOUR_SERVICE_ID',  // Например: 'service_abc123'
-          templateId: 'YOUR_TEMPLATE_ID', // Например: 'template_2fa_code'
-          publicKey: 'YOUR_PUBLIC_KEY'    // Например: 'xYz123AbC'
-        };
-
         function MultiplicationGame() {
           const [user, setUser] = useState(null);
           const [loading, setLoading] = useState(true);
@@ -63,11 +48,6 @@
           const [hasLicense, setHasLicense] = useState(false);
           const [showActivation, setShowActivation] = useState(false);
           const [isCheckingDevice, setIsCheckingDevice] = useState(false);
-
-          // НОВОЕ: 2FA states
-          const [pending2FA, setPending2FA] = useState(false);
-          const [twoFactorCode, setTwoFactorCode] = useState('');
-          const [userCredentialTemp, setUserCredentialTemp] = useState(null);
           const [totalRounds, setTotalRounds] = useState(10);
           const [operations, setOperations] = useState({
             multiply: true,
@@ -223,129 +203,6 @@
               localStorage.removeItem(cacheKey);
             } catch (e) {
               console.log('Cache clear error:', e);
-            }
-          };
-
-          // ============================================
-          // НОВОЕ: 2FA СИСТЕМА (двухфакторная аутентификация)
-          // ============================================
-
-          // Генерация 6-значного кода
-          const generate2FACode = () => {
-            return Math.floor(100000 + Math.random() * 900000).toString();
-          };
-
-          // Отправка 2FA кода на email через EmailJS
-          const send2FAEmail = async (userEmail, code) => {
-            try {
-              // Проверяем что EmailJS настроен
-              if (!window.emailjs || EMAILJS_CONFIG.serviceId === 'YOUR_SERVICE_ID') {
-                console.warn('⚠️ EmailJS не настроен! Код 2FA:', code);
-                showNotification(
-                  `⚠️ EmailJS не настроен!\n\nВаш 2FA код: ${code}\n\n(В production коды будут отправляться на email)`,
-                  'warning',
-                  15000
-                );
-                return true; // Продолжаем для тестирования
-              }
-
-              // Инициализируем EmailJS
-              emailjs.init(EMAILJS_CONFIG.publicKey);
-
-              // Отправляем email
-              await emailjs.send(
-                EMAILJS_CONFIG.serviceId,
-                EMAILJS_CONFIG.templateId,
-                {
-                  to_email: userEmail,
-                  code: code,
-                  user_name: userEmail.split('@')[0],
-                  timestamp: new Date().toLocaleString('ru-RU')
-                }
-              );
-
-              return true;
-            } catch (error) {
-              console.error('Ошибка отправки 2FA email:', error);
-              // Показываем код в уведомлении для тестирования
-              showNotification(
-                `⚠️ Ошибка отправки email\n\nВаш 2FA код: ${code}\n\n(Проверьте настройки EmailJS)`,
-                'warning',
-                15000
-              );
-              return true; // Продолжаем для тестирования
-            }
-          };
-
-          // Сохранение 2FA кода в Firestore с TTL
-          const save2FACode = async (userId, code) => {
-            try {
-              const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 минут
-
-              await db.collection('twoFactorCodes').doc(userId).set({
-                code: code,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
-                used: false
-              });
-
-              return true;
-            } catch (error) {
-              console.error('Ошибка сохранения 2FA кода:', error);
-              return false;
-            }
-          };
-
-          // Проверка 2FA кода
-          const verify2FACode = async (userId, inputCode) => {
-            try {
-              const codeDoc = await db.collection('twoFactorCodes').doc(userId).get();
-
-              if (!codeDoc.exists) {
-                showNotification('❌ Код не найден. Запросите новый код.', 'error', 5000);
-                return false;
-              }
-
-              const codeData = codeDoc.data();
-
-              // Проверяем что код не использован
-              if (codeData.used) {
-                showNotification('❌ Этот код уже был использован.', 'error', 5000);
-                return false;
-              }
-
-              // Проверяем срок действия
-              const now = new Date();
-              const expiresAt = codeData.expiresAt.toDate();
-              if (now > expiresAt) {
-                showNotification('❌ Код истек. Запросите новый код.', 'error', 5000);
-                await db.collection('twoFactorCodes').doc(userId).delete();
-                return false;
-              }
-
-              // Проверяем код
-              if (codeData.code !== inputCode.trim()) {
-                showNotification('❌ Неверный код. Попробуйте еще раз.', 'error', 5000);
-                return false;
-              }
-
-              // Помечаем код как использованный
-              await db.collection('twoFactorCodes').doc(userId).update({ used: true });
-
-              // Удаляем код через 10 секунд
-              setTimeout(async () => {
-                try {
-                  await db.collection('twoFactorCodes').doc(userId).delete();
-                } catch (e) {
-                  console.log('Error deleting used code:', e);
-                }
-              }, 10000);
-
-              return true;
-            } catch (error) {
-              console.error('Ошибка проверки 2FA кода:', error);
-              showNotification('❌ Ошибка проверки кода: ' + error.message, 'error', 6000);
-              return false;
             }
           };
 
@@ -809,79 +666,6 @@
               // Входим в аккаунт
               const userCredential = await auth.signInWithEmailAndPassword(email, password);
               const userId = userCredential.user.uid;
-              const userEmail = userCredential.user.email;
-
-              // НОВОЕ: 2FA - Генерируем и отправляем код
-              setLoadingStatus('Отправка 2FA кода...');
-              const code = generate2FACode();
-
-              // Сохраняем код в Firestore
-              const savedCode = await save2FACode(userId, code);
-              if (!savedCode) {
-                throw new Error('Не удалось сохранить 2FA код');
-              }
-
-              // Отправляем код на email
-              await send2FAEmail(userEmail, code);
-
-              // Сохраняем данные для продолжения после 2FA
-              setUserCredentialTemp({ userCredential, userId });
-
-              // Переходим в режим ввода 2FA кода
-              setPending2FA(true);
-              setLoading(false);
-              setLoadingStatus('');
-              setTwoFactorCode('');
-
-              showNotification(
-                `📧 Код подтверждения отправлен на ${userEmail}\n\nПроверьте email и введите 6-значный код.\n\nКод действителен 5 минут.`,
-                'info',
-                10000
-              );
-
-            } catch (error) {
-              setIsCheckingDevice(false); // Сбрасываем флаг при ошибке
-              setLoading(false); // ВАЖНО: Убираем песочные часы
-              setLoadingStatus('');
-              setPending2FA(false);
-              setUserCredentialTemp(null);
-
-              // Выходим из частично залогиненного состояния
-              try {
-                await auth.signOut();
-              } catch (e) {
-                console.log('Logout error:', e);
-              }
-
-              showNotification('❌ Ошибка входа: ' + error.message, 'error', 6000);
-            }
-          };
-
-          // НОВОЕ: Подтверждение 2FA кода
-          const handleConfirm2FA = async () => {
-            try {
-              if (!userCredentialTemp) {
-                showNotification('❌ Ошибка: нет данных сессии', 'error', 5000);
-                setPending2FA(false);
-                return;
-              }
-
-              setLoading(true);
-              setLoadingStatus('Проверка кода...');
-
-              const { userId } = userCredentialTemp;
-
-              // Проверяем 2FA код
-              const isValid = await verify2FACode(userId, twoFactorCode);
-
-              if (!isValid) {
-                setLoading(false);
-                setLoadingStatus('');
-                return; // Ошибка уже показана в verify2FACode
-              }
-
-              // Код верный! Продолжаем вход
-              showNotification('✅ Код подтверждён!', 'success', 3000);
 
               // Проверяем нет ли активной сессии на другом устройстве
               setLoadingStatus('Проверка устройства...');
@@ -890,59 +674,24 @@
               } catch (deviceError) {
                 // Если есть активная сессия на другом устройстве - вход запрещен
                 console.error('Device check failed:', deviceError);
-                setIsCheckingDevice(false);
-                setLoading(false);
+                setIsCheckingDevice(false); // Сбрасываем флаг
+                setLoading(false); // ВАЖНО: Убираем песочные часы
                 setLoadingStatus('');
-                setPending2FA(false);
-                setUserCredentialTemp(null);
-
-                // Выходим
-                await auth.signOut();
                 return;
               }
 
               // Проверка прошла - разрешаем onAuthStateChanged продолжить
               setIsCheckingDevice(false);
-              setPending2FA(false);
-              setUserCredentialTemp(null);
               setLoadingStatus('Загрузка...');
 
               // Успешный вход - Firebase обработает через onAuthStateChanged
               // onAuthStateChanged вызовет updateSession который создаст активную сессию
             } catch (error) {
-              setIsCheckingDevice(false);
-              setLoading(false);
+              setIsCheckingDevice(false); // Сбрасываем флаг при ошибке
+              setLoading(false); // ВАЖНО: Убираем песочные часы
               setLoadingStatus('');
-              setPending2FA(false);
-              setUserCredentialTemp(null);
-
-              // Выходим из частично залогиненного состояния
-              try {
-                await auth.signOut();
-              } catch (e) {
-                console.log('Logout error:', e);
-              }
-
-              showNotification('❌ Ошибка подтверждения: ' + error.message, 'error', 6000);
+              showNotification('❌ Ошибка входа: ' + error.message, 'error', 6000);
             }
-          };
-
-          // НОВОЕ: Отмена 2FA и выход
-          const handleCancel2FA = async () => {
-            try {
-              await auth.signOut();
-            } catch (e) {
-              console.log('Logout error:', e);
-            }
-
-            setPending2FA(false);
-            setUserCredentialTemp(null);
-            setTwoFactorCode('');
-            setIsCheckingDevice(false);
-            setLoading(false);
-            setLoadingStatus('');
-
-            showNotification('Вход отменён', 'info', 3000);
           };
 
           const handleLogout = async () => {
@@ -1361,75 +1110,6 @@
           }
 
           if (gameState === 'auth') {
-            // НОВОЕ: Если ждем 2FA код - показываем специальный UI
-            if (pending2FA) {
-              return (
-                <>
-                  <ToastNotifications />
-                  <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
-                    <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-green-400">
-                      <div className="text-center mb-8">
-                        <div className="text-6xl mb-4">🔐</div>
-                        <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-emerald-600 mb-2">
-                          Двухфакторная аутентификация
-                        </h1>
-                        <p className="text-green-700 font-bold">Введите код из email</p>
-                      </div>
-
-                      <div className="mb-6 bg-green-50 p-4 rounded-xl border-2 border-green-300">
-                        <p className="text-green-800 text-sm text-center font-semibold">
-                          📧 Мы отправили 6-значный код на ваш email
-                        </p>
-                        <p className="text-green-700 text-xs text-center mt-2">
-                          Проверьте папку "Спам" если не видите письма
-                        </p>
-                      </div>
-
-                      <div className="mb-6">
-                        <label className="block text-green-800 font-bold mb-2 text-center">
-                          Код подтверждения
-                        </label>
-                        <input
-                          type="text"
-                          value={twoFactorCode}
-                          onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                          onKeyPress={(e) => e.key === 'Enter' && twoFactorCode.length === 6 && handleConfirm2FA()}
-                          placeholder="000000"
-                          maxLength="6"
-                          className="w-full text-3xl text-center border-2 border-green-300 rounded-xl p-4 focus:outline-none focus:border-green-500 font-black tracking-widest"
-                          style={{ letterSpacing: '0.5em' }}
-                          autoFocus
-                        />
-                        <p className="text-xs text-gray-500 text-center mt-2">
-                          Код действителен 5 минут
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={handleConfirm2FA}
-                        disabled={twoFactorCode.length !== 6}
-                        className={`w-full text-xl font-black py-4 rounded-xl mb-3 transition-all shadow-lg ${
-                          twoFactorCode.length === 6
-                            ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600'
-                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        }`}
-                      >
-                        {twoFactorCode.length === 6 ? '✅ ПОДТВЕРДИТЬ' : `Введите код (${twoFactorCode.length}/6)`}
-                      </button>
-
-                      <button
-                        onClick={handleCancel2FA}
-                        className="w-full text-red-600 font-semibold hover:text-red-700"
-                      >
-                        ❌ Отменить вход
-                      </button>
-                    </div>
-                  </div>
-                </>
-              );
-            }
-
-            // Обычный экран входа/регистрации
             return (
               <>
                 <ToastNotifications />
@@ -1441,9 +1121,6 @@
                       {authMode === 'login' ? 'Вход' : authMode === 'register' ? 'Регистрация' : 'Восстановление пароля'}
                     </h1>
                     <p className="text-purple-600 font-bold">Математическая игра</p>
-                    {authMode === 'login' && (
-                      <p className="text-xs text-gray-500 mt-2">🔐 С двухфакторной аутентификацией</p>
-                    )}
                   </div>
 
                   <div className="mb-4">
