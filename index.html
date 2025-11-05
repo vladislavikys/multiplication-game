@@ -234,13 +234,21 @@
 
           // Обновление активной сессии
           const updateSession = async (userId, skipDeviceCheck = false) => {
+            console.log('🔄 updateSession: Начало для userId:', userId, 'skipDeviceCheck:', skipDeviceCheck);
+
+            console.log('📱 Получение информации об устройстве...');
             const deviceInfo = await getDeviceInfo();
             const currentDeviceId = deviceInfo.deviceId;
+            console.log('📱 DeviceId:', currentDeviceId);
 
             try {
               // Проверяем блокировку перед обновлением сессии
+              console.log('🔍 Проверка блокировки аккаунта...');
               const userDoc = await db.collection('users').doc(userId).get();
+              console.log('📄 User doc exists:', userDoc.exists, 'blocked:', userDoc.exists ? userDoc.data().blocked : 'N/A');
+
               if (userDoc.exists && userDoc.data().blocked) {
+                console.error('🚫 Аккаунт заблокирован!');
                 showNotification('🚫 ВАШ АККАУНТ ЗАБЛОКИРОВАН\n\nОбратитесь в службу поддержки для получения информации.', 'error', 8000);
                 await auth.signOut();
                 return;
@@ -248,7 +256,9 @@
 
               // ВАЖНО: Проверяем активную сессию перед обновлением
               if (!skipDeviceCheck) {
+                console.log('🔍 Проверка активных сессий...');
                 const sessionDoc = await db.collection('sessions').doc(userId).get();
+                console.log('📄 Session doc exists:', sessionDoc.exists);
                 if (sessionDoc.exists) {
                   const sessionData = sessionDoc.data();
 
@@ -281,13 +291,15 @@
               }
 
               // Обновляем сессию текущего устройства
+              console.log('💾 Сохранение/обновление сессии в Firestore...');
               await db.collection('sessions').doc(userId).set({
                 ...deviceInfo,
                 userId,
                 isActive: true
               });
+              console.log('✅ updateSession: Сессия успешно обновлена');
             } catch (error) {
-              console.error('Error updating session:', error);
+              console.error('❌ updateSession: Ошибка обновления сессии:', error);
             }
           };
 
@@ -521,6 +533,10 @@
           };
 
           useEffect(() => {
+            console.log('🚀 useEffect: Начало инициализации приложения');
+            console.log('🔥 Firebase auth:', typeof auth !== 'undefined' ? 'Загружен' : 'НЕ загружен');
+            console.log('🔥 Firebase db:', typeof db !== 'undefined' ? 'Загружен' : 'НЕ загружен');
+
             try {
               audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
             } catch (e) {
@@ -530,29 +546,52 @@
             // ============================================
             // FALLBACK: Гарантированная установка loading = false
             // ============================================
+            let fallbackTriggered = false;
             const loadingFallbackTimer = setTimeout(() => {
-              console.warn('⚠️ FALLBACK: Превышено время ожидания инициализации Firebase');
+              console.error('⏱️ FALLBACK: Превышено время ожидания инициализации Firebase (15 сек)');
+              console.error('⚠️ onAuthStateChanged не сработал за 15 секунд');
+              fallbackTriggered = true;
               setLoading(false);
               setLoadingStatus('');
-              showNotification('⚠️ Проблема с подключением к серверу. Попробуйте обновить страницу.', 'warning', 8000);
-            }, 5000); // 5 секунд на инициализацию Firebase
+              showNotification('⚠️ Проблема с подключением к серверу.\n\nПопробуйте:\n• Проверить интернет-соединение\n• Обновить страницу (F5)\n• Очистить кэш браузера', 'warning', 10000);
+            }, 15000); // УВЕЛИЧЕНО: 15 секунд на инициализацию Firebase
+
+            console.log('⏱️ Запущен fallback таймер (15 сек)');
 
             const unsubscribe = auth.onAuthStateChanged(async (user) => {
               // Отменяем fallback таймер, т.к. Firebase работает
+              console.log('🔔 onAuthStateChanged сработал! user =', user ? user.email : 'null');
+
+              if (fallbackTriggered) {
+                console.warn('⚠️ Fallback уже сработал, игнорируем onAuthStateChanged');
+                return;
+              }
+
               clearTimeout(loadingFallbackTimer);
+              console.log('✅ Fallback таймер отменен');
               try {
                 if (user) {
+                  console.log('👤 Пользователь авторизован:', user.email, 'uid:', user.uid);
                   setUser(user);
 
                   // Загружаем данные пользователя с таймаутом
+                  let loadTimeoutTriggered = false;
                   const loadTimeout = setTimeout(() => {
-                    console.error('Timeout loading user data');
+                    console.error('⏱️ ТАЙМАУТ: Загрузка данных пользователя превысила 20 секунд');
+                    loadTimeoutTriggered = true;
                     setLoading(false);
                     setLoadingStatus('');
-                    showNotification('⏱️ Превышено время ожидания загрузки данных. Попробуйте обновить страницу.', 'error', 8000);
-                  }, 10000); // 10 секунд таймаут
+                    showNotification('⏱️ Превышено время ожидания загрузки данных.\n\nПопробуйте:\n• Проверить интернет-соединение\n• Обновить страницу (F5)', 'error', 8000);
+                  }, 20000); // УВЕЛИЧЕНО: 20 секунд таймаут
 
+                  console.log('📊 Начало загрузки данных пользователя...');
                   await loadUserData(user);  // Передаем весь user объект, не только uid
+                  console.log('✅ Данные пользователя загружены');
+
+                  if (loadTimeoutTriggered) {
+                    console.warn('⚠️ Load timeout уже сработал, прерываем');
+                    return;
+                  }
 
                   // ПРОВЕРКА: Может быть signOut произошел во время loadUserData
                   if (!auth.currentUser) {
@@ -561,7 +600,9 @@
                     return;
                   }
 
+                  console.log('🔄 Начало обновления сессии...');
                   await updateSession(user.uid);
+                  console.log('✅ Сессия обновлена');
 
                   // ПРОВЕРКА: Может быть signOut произошел во время updateSession
                   if (!auth.currentUser) {
@@ -571,6 +612,7 @@
                   }
 
                   clearTimeout(loadTimeout);
+                  console.log('✅ Load timeout отменен');
 
                   // ПРОВЕРКА: Если идет проверка устройства - НЕ ПУСКАЕМ (ждем результата)
                   if (isCheckingDevice) {
@@ -605,9 +647,11 @@
                   // Эта проверка вызывала ложные срабатывания "множественный вход"
                   // потому что updateSession еще не успевал создать новую сессию
 
+                  console.log('🎮 Переход на экран настройки игры (setup)');
                   setGameState('setup');
 
                   // Обновляем сессию каждые 10 секунд (чаще проверка защиты от множественного входа)
+                  console.log('⏰ Запуск интервала обновления сессии (каждые 10 сек)');
                   const sessionInterval = setInterval(() => {
                     if (auth.currentUser) {
                       updateSession(auth.currentUser.uid);
@@ -617,6 +661,7 @@
                   // Очищаем интервал при выходе
                   return () => clearInterval(sessionInterval);
                 } else {
+                  console.log('❌ Пользователь не авторизован (user = null)');
                   setUser(null);
                   setGameState('auth');
                 }
