@@ -4,15 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Математика - Игра</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- ОПТИМИЗАЦИЯ: Defer скриптов для быстрой загрузки -->
+    <script defer crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script defer crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script defer src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Firebase -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <!-- Firebase - отложенная загрузка для оптимизации -->
+    <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
     <div id="root"></div>
@@ -38,6 +39,7 @@
         function MultiplicationGame() {
           const [user, setUser] = useState(null);
           const [loading, setLoading] = useState(true);
+          const [loadingStatus, setLoadingStatus] = useState(''); // НОВОЕ: текст статуса загрузки
           const [authMode, setAuthMode] = useState('login');
           const [email, setEmail] = useState('');
           const [password, setPassword] = useState('');
@@ -66,8 +68,12 @@
           const [attempts, setAttempts] = useState(2);
           const [lives, setLives] = useState(2);
           const [gameHistory, setGameHistory] = useState([]);
-          
+
+          // НОВОЕ: Система уведомлений
+          const [notifications, setNotifications] = useState([]);
+
           const audioContextRef = useRef(null);
+          const notificationIdRef = useRef(0);
 
           // Генерация Device ID (улучшенный fingerprint устройства)
           const getDeviceId = () => {
@@ -134,6 +140,72 @@
             };
           };
 
+          // ============================================
+          // НОВОЕ: СИСТЕМА УВЕДОМЛЕНИЙ
+          // ============================================
+
+          const showNotification = (message, type = 'info', duration = 5000) => {
+            const id = notificationIdRef.current++;
+            const notification = { id, message, type, duration };
+
+            setNotifications(prev => [...prev, notification]);
+
+            // Автоматическое удаление через duration
+            setTimeout(() => {
+              setNotifications(prev => prev.filter(n => n.id !== id));
+            }, duration);
+          };
+
+          // ============================================
+          // НОВОЕ: КЭШИРОВАНИЕ ДАННЫХ ПОЛЬЗОВАТЕЛЯ
+          // ============================================
+
+          const cacheUserData = (userId, data) => {
+            try {
+              const cacheKey = `user_cache_${userId}`;
+              const cacheData = {
+                data,
+                timestamp: Date.now(),
+                version: 1
+              };
+              localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+            } catch (e) {
+              console.log('Cache error:', e);
+            }
+          };
+
+          const getCachedUserData = (userId) => {
+            try {
+              const cacheKey = `user_cache_${userId}`;
+              const cached = localStorage.getItem(cacheKey);
+              if (!cached) return null;
+
+              const { data, timestamp, version } = JSON.parse(cached);
+              const cacheAge = Date.now() - timestamp;
+              const maxAge = 5 * 60 * 1000; // 5 минут
+
+              // Проверяем свежесть кэша
+              if (cacheAge > maxAge || version !== 1) {
+                localStorage.removeItem(cacheKey);
+                return null;
+              }
+
+              return data;
+            } catch (e) {
+              console.log('Cache read error:', e);
+              return null;
+            }
+          };
+
+          const clearUserCache = (userId) => {
+            try {
+              const cacheKey = `user_cache_${userId}`;
+              localStorage.removeItem(cacheKey);
+            } catch (e) {
+              console.log('Cache clear error:', e);
+            }
+          };
+
           // Обновление активной сессии
           const updateSession = async (userId, skipDeviceCheck = false) => {
             const deviceInfo = await getDeviceInfo();
@@ -143,7 +215,7 @@
               // Проверяем блокировку перед обновлением сессии
               const userDoc = await db.collection('users').doc(userId).get();
               if (userDoc.exists && userDoc.data().blocked) {
-                alert('🚫 ВАШ АККАУНТ ЗАБЛОКИРОВАН\n\nОбратитесь в службу поддержки для получения информации.');
+                showNotification('🚫 ВАШ АККАУНТ ЗАБЛОКИРОВАН\n\nОбратитесь в службу поддержки для получения информации.', 'error', 8000);
                 await auth.signOut();
                 return;
               }
@@ -158,12 +230,12 @@
                   if (sessionData.isActive && sessionData.deviceId !== currentDeviceId) {
                     console.log('🚫 Обнаружена активная сессия на другом устройстве:', sessionData.deviceId);
 
-                    // Сначала делаем logout, потом показываем alert
+                    // Сначала делаем logout, потом показываем уведомление
                     await auth.signOut();
                     setUser(null);
                     setGameState('auth');
 
-                    alert('⚠️ АККАУНТ УЖЕ ИСПОЛЬЗУЕТСЯ\n\nВаш аккаунт активен на другом устройстве.\n\nТолько одно устройство может быть онлайн одновременно.\n\nВы были отключены.');
+                    showNotification('⚠️ АККАУНТ УЖЕ ИСПОЛЬЗУЕТСЯ\n\nВаш аккаунт активен на другом устройстве. Только одно устройство может быть онлайн одновременно.\n\nВы были отключены.', 'warning', 8000);
                     return;
                   }
 
@@ -171,12 +243,12 @@
                   if (!sessionData.isActive && sessionData.deviceId === currentDeviceId) {
                     console.log('🚫 Ваша сессия была деактивирована при входе с другого устройства');
 
-                    // Сначала делаем logout, потом показываем alert
+                    // Сначала делаем logout, потом показываем уведомление
                     await auth.signOut();
                     setUser(null);
                     setGameState('auth');
 
-                    alert('⚠️ ВХОД С ДРУГОГО УСТРОЙСТВА\n\nВ ваш аккаунт вошли с другого устройства.\n\nВаша сессия была завершена.');
+                    showNotification('⚠️ ВХОД С ДРУГОГО УСТРОЙСТВА\n\nВ ваш аккаунт вошли с другого устройства. Ваша сессия была завершена.', 'warning', 8000);
                     return;
                   }
                 }
@@ -282,7 +354,7 @@
 
               // Максимум 3 смены устройств в день
               if (switchCount >= 3) {
-                alert('⚠️ ПОДОЗРИТЕЛЬНАЯ АКТИВНОСТЬ!\n\nВы превысили лимит смены устройств (3 раза в день).\n\nЭто выглядит как попытка расшарить аккаунт.\n\nДоступ временно ограничен.\n\nСвяжитесь с поддержкой.');
+                showNotification('⚠️ ПОДОЗРИТЕЛЬНАЯ АКТИВНОСТЬ!\n\nВы превысили лимит смены устройств (3 раза в день). Это выглядит как попытка расшарить аккаунт.\n\nДоступ временно ограничен. Свяжитесь с поддержкой.', 'error', 10000);
                 await logSecurityEvent(userId, 'device_limit_exceeded', {
                   switchCount,
                   blocked: true
@@ -418,7 +490,8 @@
                   const loadTimeout = setTimeout(() => {
                     console.error('Timeout loading user data');
                     setLoading(false);
-                    alert('⏱️ Превышено время ожидания загрузки данных.\nПопробуйте обновить страницу.');
+                    setLoadingStatus('');
+                    showNotification('⏱️ Превышено время ожидания загрузки данных. Попробуйте обновить страницу.', 'error', 8000);
                   }, 10000); // 10 секунд таймаут
 
                   await loadUserData(user);  // Передаем весь user объект, не только uid
@@ -491,9 +564,10 @@
                 }
               } catch (error) {
                 console.error('Error in auth state changed:', error);
-                alert('❌ Ошибка загрузки: ' + error.message);
+                showNotification('❌ Ошибка загрузки: ' + error.message, 'error', 6000);
               } finally {
                 setLoading(false);
+                setLoadingStatus('');
               }
             });
 
@@ -506,6 +580,15 @@
               const userEmail = userObj.email;
 
               console.log('🔍 Loading user data for:', userId, userEmail);
+              setLoadingStatus('Загрузка данных пользователя...'); // НОВОЕ: индикатор прогресса
+
+              // НОВОЕ: Пробуем загрузить из кэша
+              const cachedData = getCachedUserData(userId);
+              if (cachedData) {
+                console.log('✅ Loaded from cache:', cachedData);
+                setHasLicense(cachedData.hasLicense || false);
+                setLoadingStatus('Проверка актуальности данных...');
+              }
 
               const doc = await db.collection('users').doc(userId).get();
               if (doc.exists) {
@@ -515,18 +598,23 @@
 
                 // Проверка блокировки аккаунта
                 if (data.blocked) {
-                  alert('🚫 ВАШ АККАУНТ ЗАБЛОКИРОВАН\n\nОбратитесь в службу поддержки для получения информации.');
+                  showNotification('🚫 ВАШ АККАУНТ ЗАБЛОКИРОВАН\n\nОбратитесь в службу поддержки для получения информации.', 'error', 8000);
                   await auth.signOut();
                   setGameState('auth');
+                  setLoadingStatus('');
                   return;
                 }
 
                 const licenseStatus = data.hasLicense || false;
                 console.log('✅ Setting hasLicense to:', licenseStatus);
                 setHasLicense(licenseStatus);
+
+                // НОВОЕ: Сохраняем в кэш
+                cacheUserData(userId, { hasLicense: licenseStatus, email: data.email });
               } else {
                 // Создаем новый профиль пользователя
                 console.log('📝 Creating new user document with hasLicense: false');
+                setLoadingStatus('Создание профиля...');
 
                 await db.collection('users').doc(userId).set({
                   hasLicense: false,
@@ -538,23 +626,33 @@
 
                 console.log('✅ New user created, setting hasLicense to: false');
                 setHasLicense(false);
+
+                // НОВОЕ: Сохраняем в кэш
+                cacheUserData(userId, { hasLicense: false, email: userEmail });
               }
+
+              setLoadingStatus(''); // Очищаем статус
             } catch (error) {
               console.error('❌ Error loading user data:', error);
-              alert('❌ Ошибка загрузки данных пользователя');
+              showNotification('❌ Ошибка загрузки данных пользователя', 'error', 6000);
+              setLoadingStatus('');
             }
           };
 
           const handleRegister = async () => {
             try {
+              setLoadingStatus('Регистрация аккаунта...');
               const userCredential = await auth.createUserWithEmailAndPassword(email, password);
 
               // Отправляем письмо для подтверждения email
+              setLoadingStatus('Отправка письма подтверждения...');
               await userCredential.user.sendEmailVerification();
 
-              alert('✅ Регистрация успешна!\n\n📧 На вашу почту ' + email + ' отправлено письмо с подтверждением.\n\nВы можете войти в систему сейчас, но рекомендуется подтвердить email.\n\n💡 Логин: ' + email + '\n🔑 Пароль: тот который вы ввели');
+              setLoadingStatus('');
+              showNotification('✅ Регистрация успешна!\n\n📧 На вашу почту ' + email + ' отправлено письмо с подтверждением.\n\nВы можете войти в систему сейчас, но рекомендуется подтвердить email.\n\n💡 Логин: ' + email, 'success', 10000);
             } catch (error) {
-              alert('❌ Ошибка: ' + error.message);
+              setLoadingStatus('');
+              showNotification('❌ Ошибка: ' + error.message, 'error', 6000);
             }
           };
 
@@ -563,12 +661,14 @@
               // ВАЖНО: Устанавливаем флаг ДО входа чтобы заблокировать onAuthStateChanged
               setIsCheckingDevice(true);
               setLoading(true); // Показываем песочные часы
+              setLoadingStatus('Вход в аккаунт...');
 
               // Входим в аккаунт
               const userCredential = await auth.signInWithEmailAndPassword(email, password);
               const userId = userCredential.user.uid;
 
               // Проверяем нет ли активной сессии на другом устройстве
+              setLoadingStatus('Проверка устройства...');
               try {
                 await checkAndSwitchDevice(userId);
               } catch (deviceError) {
@@ -576,18 +676,21 @@
                 console.error('Device check failed:', deviceError);
                 setIsCheckingDevice(false); // Сбрасываем флаг
                 setLoading(false); // ВАЖНО: Убираем песочные часы
+                setLoadingStatus('');
                 return;
               }
 
               // Проверка прошла - разрешаем onAuthStateChanged продолжить
               setIsCheckingDevice(false);
+              setLoadingStatus('Загрузка...');
 
               // Успешный вход - Firebase обработает через onAuthStateChanged
               // onAuthStateChanged вызовет updateSession который создаст активную сессию
             } catch (error) {
               setIsCheckingDevice(false); // Сбрасываем флаг при ошибке
               setLoading(false); // ВАЖНО: Убираем песочные часы
-              alert('❌ Ошибка входа: ' + error.message);
+              setLoadingStatus('');
+              showNotification('❌ Ошибка входа: ' + error.message, 'error', 6000);
             }
           };
 
@@ -610,16 +713,19 @@
 
           const handlePasswordReset = async () => {
             if (!email) {
-              alert('❌ Введите email для восстановления пароля');
+              showNotification('❌ Введите email для восстановления пароля', 'warning', 5000);
               return;
             }
 
             try {
+              setLoadingStatus('Отправка письма...');
               await auth.sendPasswordResetEmail(email);
-              alert('✅ Письмо для восстановления пароля отправлено на ' + email + '\n\nПроверьте вашу почту (также папку "Спам")');
+              setLoadingStatus('');
+              showNotification('✅ Письмо для восстановления пароля отправлено на ' + email + '\n\nПроверьте вашу почту (также папку "Спам")', 'success', 8000);
               setAuthMode('login');
             } catch (error) {
-              alert('❌ Ошибка: ' + error.message);
+              setLoadingStatus('');
+              showNotification('❌ Ошибка: ' + error.message, 'error', 6000);
             }
           };
 
@@ -633,25 +739,28 @@
 
           const activateCode = async () => {
             if (!user) {
-              alert('❌ Ошибка: пользователь не авторизован');
+              showNotification('❌ Ошибка: пользователь не авторизован', 'error', 5000);
               return;
             }
 
             const code = activationCode.toUpperCase().trim();
 
             if (!code) {
-              alert('❌ Введите код активации');
+              showNotification('❌ Введите код активации', 'warning', 5000);
               return;
             }
 
             try {
+              setLoadingStatus('Проверка кода...');
+
               // 1. Получаем данные пользователя
               const userDoc = await db.collection('users').doc(user.uid).get();
               const userData = userDoc.data();
 
               // 2. Проверяем, не активировал ли пользователь уже этот код
               if (userData.activatedCodes && userData.activatedCodes.includes(code)) {
-                alert('❌ Вы уже активировали этот код ранее!');
+                setLoadingStatus('');
+                showNotification('❌ Вы уже активировали этот код ранее!', 'warning', 6000);
                 return;
               }
 
@@ -659,7 +768,8 @@
               const codeDoc = await db.collection('codes').doc(code).get();
 
               if (!codeDoc.exists) {
-                alert('❌ Код не найден! Проверьте правильность ввода.');
+                setLoadingStatus('');
+                showNotification('❌ Код не найден! Проверьте правильность ввода.', 'error', 6000);
                 return;
               }
 
@@ -667,10 +777,11 @@
 
               // 4. Проверяем, не использован ли код другим пользователем
               if (codeData.used) {
+                setLoadingStatus('');
                 if (codeData.usedBy === user.uid) {
-                  alert('❌ Вы уже активировали этот код!');
+                  showNotification('❌ Вы уже активировали этот код!', 'warning', 6000);
                 } else {
-                  alert('❌ Этот код уже был использован другим пользователем!');
+                  showNotification('❌ Этот код уже был использован другим пользователем!', 'error', 6000);
                 }
                 return;
               }
@@ -697,22 +808,28 @@
               });
 
               // 6. Обновляем состояние
+              setLoadingStatus('Активация лицензии...');
               setHasLicense(true);
               setActivationCode('');
               setShowActivation(false);
 
-              alert(`✅ Код успешно активирован!\n\n🎉 Бессрочная лицензия активирована!\n🔑 Код: ${code}\n\n✨ Теперь у вас неограниченный доступ к игре навсегда!`);
+              // НОВОЕ: Обновляем кэш
+              cacheUserData(user.uid, { hasLicense: true, email: user.email });
+
+              setLoadingStatus('');
+              showNotification(`✅ Код успешно активирован!\n\n🎉 Бессрочная лицензия активирована!\n🔑 Код: ${code}\n\n✨ Теперь у вас неограниченный доступ к игре навсегда!`, 'success', 10000);
 
             } catch (error) {
               console.error('Error activating code:', error);
+              setLoadingStatus('');
 
               // Понятные сообщения об ошибках
               if (error.code === 'permission-denied') {
-                alert('❌ Ошибка доступа. Проверьте подключение к интернету.');
+                showNotification('❌ Ошибка доступа. Проверьте подключение к интернету.', 'error', 6000);
               } else if (error.code === 'unavailable') {
-                alert('❌ Сервер недоступен. Попробуйте позже.');
+                showNotification('❌ Сервер недоступен. Попробуйте позже.', 'error', 6000);
               } else {
-                alert('❌ Ошибка активации кода. Попробуйте снова.\n\n' + error.message);
+                showNotification('❌ Ошибка активации кода. Попробуйте снова.\n\n' + error.message, 'error', 8000);
               }
             }
           };
@@ -766,7 +883,7 @@
 
           const startGame = async () => {
             if (!hasLicense) {
-              alert('❌ У вас нет доступа к игре!\n\n🔑 Введите код активации для получения бессрочной лицензии.');
+              showNotification('❌ У вас нет доступа к игре!\n\n🔑 Введите код активации для получения бессрочной лицензии.', 'warning', 8000);
               setShowActivation(true);
               return;
             }
@@ -934,17 +1051,69 @@
             backgroundSize: '60px 60px'
           };
 
+          // НОВОЕ: Toast уведомления компонент
+          const ToastNotifications = () => (
+            <div className="fixed top-4 right-4 z-50 space-y-2" style={{ maxWidth: '400px' }}>
+              {notifications.map(notif => {
+                const bgColor = {
+                  success: 'bg-green-500',
+                  error: 'bg-red-500',
+                  warning: 'bg-orange-500',
+                  info: 'bg-blue-500'
+                }[notif.type] || 'bg-gray-500';
+
+                return (
+                  <div
+                    key={notif.id}
+                    className={`${bgColor} text-white p-4 rounded-lg shadow-2xl border-2 border-white animate-slide-in`}
+                    style={{
+                      animation: 'slideIn 0.3s ease-out',
+                      whiteSpace: 'pre-line',
+                      wordWrap: 'break-word'
+                    }}
+                  >
+                    <div className="font-bold text-sm">{notif.message}</div>
+                  </div>
+                );
+              })}
+              <style jsx>{`
+                @keyframes slideIn {
+                  from {
+                    transform: translateX(100%);
+                    opacity: 0;
+                  }
+                  to {
+                    transform: translateX(0);
+                    opacity: 1;
+                  }
+                }
+              `}</style>
+            </div>
+          );
+
           if (loading) {
             return (
-              <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center">
-                <div className="text-6xl">⏳</div>
-              </div>
+              <>
+                <ToastNotifications />
+                <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="text-6xl mb-4 animate-bounce">⏳</div>
+                    {loadingStatus && (
+                      <div className="text-xl font-bold text-purple-700 bg-white px-6 py-3 rounded-full shadow-lg">
+                        {loadingStatus}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
             );
           }
 
           if (gameState === 'auth') {
             return (
-              <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
+              <>
+                <ToastNotifications />
+                <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
                 <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-purple-400">
                   <div className="text-center mb-8">
                     <div className="text-6xl mb-4">{authMode === 'reset' ? '🔑' : '🎓'}</div>
@@ -1002,12 +1171,15 @@
                   </button>
                 </div>
               </div>
+              </>
             );
           }
 
           if (gameState === 'setup') {
             return (
-              <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
+              <>
+                <ToastNotifications />
+                <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
                 <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-purple-400 relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"></div>
                   
@@ -1156,6 +1328,7 @@
                   )}
                 </div>
               </div>
+              </>
             );
           }
 
@@ -1163,7 +1336,9 @@
             const grade = percentage >= 90 ? '🏆' : percentage >= 70 ? '⭐' : percentage >= 50 ? '👍' : '💪';
 
             return (
-              <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
+              <>
+                <ToastNotifications />
+                <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
                 <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full border-4 border-purple-400 relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"></div>
 
@@ -1232,11 +1407,14 @@
               </button>
             </div>
           </div>
+          </>
         );
       }
 
       return (
-        <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
+        <>
+          <ToastNotifications />
+          <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
           <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-purple-400 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"></div>
 
@@ -1359,6 +1537,7 @@
             )}
           </div>
         </div>
+        </>
       );
     }
 
