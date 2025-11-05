@@ -141,21 +141,41 @@
 
           // Получение IP адреса (приблизительно)
           const getDeviceInfo = async () => {
+            console.log('🌐 getDeviceInfo: Начало получения информации об устройстве');
             const deviceId = getDeviceId();
             const userAgent = navigator.userAgent;
             const platform = navigator.platform;
             const language = navigator.language;
 
-            // Попытка получить IP (будет работать через внешний сервис)
+            // Попытка получить IP (будет работать через внешний сервис) с ТАЙМАУТОМ
             let ipAddress = 'unknown';
             try {
-              const response = await fetch('https://api.ipify.org?format=json');
+              console.log('🌍 Запрос IP адреса с api.ipify.org (таймаут 3 сек)...');
+
+              // КРИТИЧЕСКИ ВАЖНО: Добавляем таймаут на fetch
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => {
+                console.warn('⏱️ Таймаут запроса IP (3 сек), прерываем');
+                controller.abort();
+              }, 3000); // 3 секунды таймаут
+
+              const response = await fetch('https://api.ipify.org?format=json', {
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+
               const data = await response.json();
               ipAddress = data.ip;
+              console.log('✅ IP адрес получен:', ipAddress);
             } catch (e) {
-              console.log('Could not get IP');
+              if (e.name === 'AbortError') {
+                console.warn('⏱️ Запрос IP прерван по таймауту (>3 сек), используем unknown');
+              } else {
+                console.warn('⚠️ Не удалось получить IP:', e.message);
+              }
             }
 
+            console.log('✅ getDeviceInfo завершен:', { deviceId, ipAddress, platform });
             return {
               deviceId,
               userAgent,
@@ -783,7 +803,10 @@
           };
 
           const handleLogin = async () => {
-            console.log('🔑 Начало входа для:', email);
+            const startTime = Date.now();
+            console.log('🔑 ========================================');
+            console.log('🔑 НАЧАЛО ВХОДА для:', email);
+            console.log('🔑 ========================================');
 
             try {
               // ВАЖНО: Устанавливаем флаг ДО входа чтобы заблокировать onAuthStateChanged
@@ -791,28 +814,35 @@
               setLoading(true); // Показываем песочные часы
               setLoadingStatus('Вход в аккаунт...');
 
-              // ТАЙМАУТ на весь процесс входа (30 секунд)
+              // ТАЙМАУТ на весь процесс входа (60 секунд)
               const loginTimeout = setTimeout(() => {
-                console.error('⏱️ ТАЙМАУТ входа превышен (30 сек)');
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                console.error('⏱️ ТАЙМАУТ входа превышен (60 сек)');
+                console.error('❌ Вход не завершился за 60 секунд - это ненормально');
+                console.error('📊 Затрачено времени:', elapsed, 'секунд');
                 setIsCheckingDevice(false);
                 setLoading(false);
                 setLoadingStatus('');
-                showNotification('⏱️ ПРЕВЫШЕНО ВРЕМЯ ОЖИДАНИЯ\n\nВход занял слишком много времени.\n\n💡 Попробуйте:\n• Проверить интернет-соединение\n• Обновить страницу\n• Попробовать позже', 'error', 8000);
-              }, 30000);
+                showNotification('⏱️ ПРЕВЫШЕНО ВРЕМЯ ОЖИДАНИЯ\n\nВход занял слишком много времени (>60 сек).\n\n💡 Попробуйте:\n• Проверить интернет-соединение\n• Обновить страницу (Ctrl+F5)\n• Попробовать позже\n• Посмотреть консоль (F12) для деталей', 'error', 10000);
+              }, 60000); // УВЕЛИЧЕНО: 60 секунд вместо 30
 
               // Входим в аккаунт
-              console.log('🔐 Попытка авторизации Firebase...');
+              const authStart = Date.now();
+              console.log('🔐 ШАГ 1: Авторизация Firebase...');
               const userCredential = await auth.signInWithEmailAndPassword(email, password);
               const userId = userCredential.user.uid;
-              console.log('✅ Firebase авторизация успешна, userId:', userId);
+              const authTime = ((Date.now() - authStart) / 1000).toFixed(1);
+              console.log('✅ Firebase авторизация успешна за', authTime, 'сек, userId:', userId);
 
               // Проверяем нет ли активной сессии на другом устройстве
               setLoadingStatus('Проверка устройства...');
-              console.log('🔍 Проверка активных устройств...');
+              const deviceStart = Date.now();
+              console.log('🔍 ШАГ 2: Проверка активных устройств...');
 
               try {
                 const canLogin = await checkAndSwitchDevice(userId);
-                console.log('✅ Проверка устройства завершена, canLogin:', canLogin);
+                const deviceTime = ((Date.now() - deviceStart) / 1000).toFixed(1);
+                console.log('✅ Проверка устройства завершена за', deviceTime, 'сек, canLogin:', canLogin);
 
                 if (!canLogin) {
                   throw new Error('Вход отменен пользователем');
@@ -833,7 +863,10 @@
               }
 
               // Проверка прошла - разрешаем onAuthStateChanged продолжить
-              console.log('✅ Вход разрешен, onAuthStateChanged продолжит...');
+              const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+              console.log('✅ ШАГ 3: Вход разрешен, onAuthStateChanged продолжит...');
+              console.log('📊 ОБЩЕЕ ВРЕМЯ ВХОДА:', totalTime, 'секунд');
+              console.log('🔑 ========================================');
               clearTimeout(loginTimeout);
               setIsCheckingDevice(false);
               setLoadingStatus('Загрузка данных...');
@@ -841,7 +874,8 @@
               // Успешный вход - Firebase обработает через onAuthStateChanged
               // onAuthStateChanged вызовет updateSession который создаст активную сессию
             } catch (error) {
-              console.error('❌ Login error:', error);
+              const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+              console.error('❌ Login error после', totalTime, 'секунд:', error);
               setIsCheckingDevice(false); // Сбрасываем флаг при ошибке
               setLoading(false); // ВАЖНО: Убираем песочные часы
               setLoadingStatus('');
