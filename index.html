@@ -469,25 +469,10 @@
                     return;
                   }
 
-                  // Проверяем что сессия действительно активна для ЭТОГО устройства
-                  try {
-                    const sessionDoc = await db.collection('sessions').doc(user.uid).get();
-                    if (sessionDoc.exists) {
-                      const sessionData = sessionDoc.data();
-                      const currentDeviceId = getDeviceId();
-
-                      // Если активна сессия другого устройства - НЕ ПУСКАЕМ
-                      if (sessionData.deviceId !== currentDeviceId || !sessionData.isActive) {
-                        console.log('🚫 КРИТИЧЕСКАЯ ПРОВЕРКА: сессия неактивна или другое устройство');
-                        await auth.signOut();
-                        setUser(null);
-                        setGameState('auth');
-                        return;
-                      }
-                    }
-                  } catch (error) {
-                    console.error('Ошибка финальной проверки сессии:', error);
-                  }
+                  // УБРАНА двойная проверка устройства!
+                  // handleLogin уже проверил устройство через checkAndSwitchDevice
+                  // Эта проверка вызывала ложные срабатывания "множественный вход"
+                  // потому что updateSession еще не успевал создать новую сессию
 
                   setGameState('setup');
 
@@ -577,6 +562,7 @@
             try {
               // ВАЖНО: Устанавливаем флаг ДО входа чтобы заблокировать onAuthStateChanged
               setIsCheckingDevice(true);
+              setLoading(true); // Показываем песочные часы
 
               // Входим в аккаунт
               const userCredential = await auth.signInWithEmailAndPassword(email, password);
@@ -589,6 +575,7 @@
                 // Если есть активная сессия на другом устройстве - вход запрещен
                 console.error('Device check failed:', deviceError);
                 setIsCheckingDevice(false); // Сбрасываем флаг
+                setLoading(false); // ВАЖНО: Убираем песочные часы
                 return;
               }
 
@@ -599,6 +586,7 @@
               // onAuthStateChanged вызовет updateSession который создаст активную сессию
             } catch (error) {
               setIsCheckingDevice(false); // Сбрасываем флаг при ошибке
+              setLoading(false); // ВАЖНО: Убираем песочные часы
               alert('❌ Ошибка входа: ' + error.message);
             }
           };
