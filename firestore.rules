@@ -71,6 +71,25 @@ service cloud.firestore {
     }
 
     // ========================================
+    // TWO FACTOR CODES - 2FA ПРАВИЛА
+    // ========================================
+    match /twoFactorCodes/{userId} {
+      // Создать код может только система (фактически любой авторизованный)
+      allow create: if isSignedIn();
+
+      // Прочитать код может только владелец или админ
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Обновить (пометить как использованный) может только владелец
+      allow update: if isOwner(userId)
+        && request.resource.data.used == true
+        && resource.data.used == false;
+
+      // Удалять нельзя (коды истекают сами через TTL)
+      allow delete: if false;
+    }
+
+    // ========================================
     // DEFAULT - DENY ALL
     // ========================================
     match /{document=**} {

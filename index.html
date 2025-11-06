@@ -1439,6 +1439,74 @@
           }
 
           if (gameState === 'auth') {
+            // НОВОЕ: Если ждем 2FA - показываем форму ввода кода
+            if (pending2FA) {
+              return (
+                <>
+                  <ToastNotifications />
+                  <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 flex items-center justify-center p-4" style={mathBg}>
+                    <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-green-400">
+                      <div className="text-center mb-8">
+                        <div className="text-6xl mb-4">🔐</div>
+                        <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-emerald-600 mb-2">
+                          Двухфакторная<br/>Аутентификация
+                        </h1>
+                        <p className="text-green-600 font-bold">Проверьте вашу почту</p>
+                      </div>
+
+                      <div className="mb-6 bg-green-50 border-2 border-green-400 rounded-xl p-4">
+                        <p className="text-green-800 font-semibold mb-2">
+                          📧 Код подтверждения отправлен на <span className="font-bold">{email}</span>
+                        </p>
+                        <p className="text-green-700 text-sm">
+                          Проверьте почту (включая папку "Спам"). Код действителен 5 минут.
+                        </p>
+                        <p className="text-green-600 text-xs mt-2 opacity-70">
+                          💡 Для тестирования: код показан в зеленом уведомлении справа и в консоли (F12)
+                        </p>
+                      </div>
+
+                      <div className="mb-6">
+                        <label className="block text-gray-700 font-bold mb-2">
+                          Введите 6-значный код:
+                        </label>
+                        <input
+                          type="text"
+                          value={twoFactorCode}
+                          onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          onKeyPress={(e) => e.key === 'Enter' && handleConfirm2FA()}
+                          placeholder="000000"
+                          maxLength="6"
+                          className="w-full text-3xl text-center border-2 border-green-300 rounded-xl p-4 focus:outline-none focus:border-green-500 font-mono font-bold tracking-widest"
+                          autoFocus
+                        />
+                      </div>
+
+                      <button
+                        onClick={handleConfirm2FA}
+                        disabled={twoFactorCode.length !== 6}
+                        className={`w-full text-xl font-black py-4 rounded-xl mb-3 transition-all shadow-lg ${
+                          twoFactorCode.length === 6
+                            ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600'
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        ✅ ПОДТВЕРДИТЬ КОД
+                      </button>
+
+                      <button
+                        onClick={handleCancel2FA}
+                        className="w-full text-gray-600 font-semibold hover:text-red-600"
+                      >
+                        ❌ Отменить вход
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            }
+
+            // Обычная форма входа/регистрации
             return (
               <>
                 <ToastNotifications />
